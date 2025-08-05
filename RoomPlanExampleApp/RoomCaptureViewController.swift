@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for this sample's licensing information.
 
 Abstract:
 The sample app's main view controller that manages the scanning process.
@@ -7,6 +7,8 @@ The sample app's main view controller that manages the scanning process.
 
 import UIKit
 import RoomPlan
+import SceneKit
+import ZIPFoundation
 
 class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
     
@@ -84,31 +86,9 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     @IBAction func cancelScanning(_ sender: UIBarButtonItem) {
         navigationController?.dismiss(animated: true)
     }
-    
-    // Export the USDZ output by specifying the `.parametric` export option.
-    // Alternatively, `.mesh` exports a nonparametric file and `.all`
-    // exports both in a single USDZ.
+
     @IBAction func exportResults(_ sender: UIButton) {
-        let destinationFolderURL = FileManager.default.temporaryDirectory.appending(path: "Export")
-        let destinationURL = destinationFolderURL.appending(path: "Room.usdz")
-        let capturedRoomURL = destinationFolderURL.appending(path: "Room.json")
-        do {
-            try FileManager.default.createDirectory(at: destinationFolderURL, withIntermediateDirectories: true)
-            let jsonEncoder = JSONEncoder()
-            let jsonData = try jsonEncoder.encode(finalResults)
-            try jsonData.write(to: capturedRoomURL)
-            try finalResults?.export(to: destinationURL, exportOptions: .parametric)
-            
-            let activityVC = UIActivityViewController(activityItems: [destinationFolderURL], applicationActivities: nil)
-            activityVC.modalPresentationStyle = .popover
-            
-            present(activityVC, animated: true, completion: nil)
-            if let popOver = activityVC.popoverPresentationController {
-                popOver.sourceView = self.exportButton
-            }
-        } catch {
-            print("Error = \(error)")
-        }
+        exportToCamIO(finalResults!)
     }
     
     private func setActiveNavBar() {
@@ -131,3 +111,485 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     }
 }
 
+struct CamIOHotspot: Codable {
+    let color: [Int]
+    let hotspotTitle: String
+    let hotspotDescription: String?
+    let sound: String?
+}
+
+struct CamIOData: Codable {
+    let title: String
+    let shortDescription: String
+    let longDescription: String
+    let creationDate: String
+    let lastUpdate: String
+    let lang: String
+    let hotspots: [CamIOHotspot]
+}
+
+extension RoomCaptureViewController {
+    
+    func exportToCamIO(_ finalResults: CapturedRoom) {
+        
+        let converter = RoomPlanToCamIOConverter()
+        
+        // Mostra indicatore di caricamento
+        let loadingAlert = UIAlertController(
+            title: "Esportazione",
+            message: "Creazione file .camio in corso...",
+            preferredStyle: .alert
+        )
+        present(loadingAlert, animated: true)
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let camioURL = converter.convertToCamIO(from: finalResults) {
+                DispatchQueue.main.async {
+                    loadingAlert.dismiss(animated: true) {
+                        // Condividi il file
+                        let activityVC = UIActivityViewController(
+                            activityItems: [camioURL],
+                            applicationActivities: nil
+                        )
+                        self.present(activityVC, animated: true)
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    loadingAlert.dismiss(animated: true) {
+                        let alert = UIAlertController(
+                            title: "Errore",
+                            message: "Impossibile creare il file .camio",
+                            preferredStyle: .alert
+                        )
+                        alert.addAction(UIAlertAction(title: "OK", style: .default))
+                        self.present(alert, animated: true)
+                    }
+                }
+            }
+        }
+    }
+}
+
+class RoomPlanToCamIOConverter {
+    
+    private let priorityMap: [String: Int] = [
+        "muro": 1,
+        "Pavimento": 2,
+        "Scale": 10,
+        "Armadio": 20,
+        "Camino": 21,
+        "Sedia": 30,
+        "Divano": 30,
+        "Letto": 30,
+        "Tavolo": 31,
+        "TV": 32,
+        "Oggetto": 32,
+        "Vasca": 39,
+        "Frigorifero": 40,
+        "Fornello": 40,
+        "Forno": 40,
+        "Lavastoviglie": 40,
+        "Lavatrice": 40,
+        "porta": 50,
+        "finestra": 50,
+        "Lavandino": 50,
+        "WC": 50
+    ]
+    
+    private var objectColorMap: [String: [Int]] = [:]
+    private var occorrenze: [String: Int] = [:]
+
+    private let renderSize: CGFloat = 2048
+    
+    func convertToCamIO(from result: CapturedRoom) -> URL? {
+        let (templateImage, colorMapImage) = renderWithPriority(from: result)
+        
+        guard let template = templateImage, let colorMap = colorMapImage else {
+            return nil
+        }
+        
+        let data = createCamIOData(from: result)
+        
+        return createCamIOFile(template: template, colorMap: colorMap, data: data)
+    }
+    
+    private func renderWithPriority(from result: CapturedRoom) -> (UIImage?, UIImage?) {
+        var minBounds = simd_float3(Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude)
+        var maxBounds = simd_float3(-Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude)
+        
+        for wall in result.walls {
+            let position = simd_float3(wall.transform.columns.3.x, wall.transform.columns.3.y, wall.transform.columns.3.z)
+            let halfDims = wall.dimensions * 0.5
+            minBounds = simd_min(minBounds, position - halfDims)
+            maxBounds = simd_max(maxBounds, position + halfDims)
+        }
+        
+        for object in result.objects {
+            let position = simd_float3(object.transform.columns.3.x, object.transform.columns.3.y, object.transform.columns.3.z)
+            let halfDims = object.dimensions * 0.5
+            minBounds = simd_min(minBounds, position - halfDims)
+            maxBounds = simd_max(maxBounds, position + halfDims)
+        }
+        
+        let sceneCenter = (minBounds + maxBounds) * 0.5
+        let sceneDimensions = maxBounds - minBounds
+        let maxDimension = max(sceneDimensions.x, sceneDimensions.z) * 1.1
+        
+        let size = CGSize(width: renderSize, height: renderSize)
+        UIGraphicsBeginImageContextWithOptions(size, true, 1.0)
+        guard let context = UIGraphicsGetCurrentContext() else { return (nil, nil) }
+        
+        context.setFillColor(UIColor.white.cgColor)
+        context.fill(CGRect(origin: .zero, size: size))
+        
+        var elementsToRender: [(priority: Int, render: () -> Void)] = []
+        
+        for (_, surface) in result.walls.enumerated() {
+            let priority = priorityMap["muro"] ?? 1
+            let color = getColor(surface.transform)
+            if occorrenze["muro"] == nil {
+                occorrenze["muro"] = 1
+            } else {
+                occorrenze["muro"]! += 1
+            }
+            objectColorMap["muro \(occorrenze["muro"]!)"] = color
+            
+            elementsToRender.append((priority: priority, render: {
+                self.drawWall(surface, color: color, context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            }))
+        }
+        
+        for (_, window) in result.windows.enumerated() {
+            let priority = priorityMap["finestra"] ?? 50
+            let color = getColor(window.transform)
+            if occorrenze["finestra"] == nil {
+                occorrenze["finestra"] = 1
+            } else {
+                occorrenze["finestra"]! += 1
+            }
+            objectColorMap["finestra \(occorrenze["finestra"]!)"] = color
+            
+            elementsToRender.append((priority: priority, render: {
+                self.drawWindow(window, color: color, context: context,
+                               sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            }))
+        }
+        
+        for (_, door) in result.doors.enumerated() {
+            let priority = priorityMap["porta"] ?? 50
+            let color = getColor(door.transform)
+            if occorrenze["porta"] == nil {
+                occorrenze["porta"] = 1
+            } else {
+                occorrenze["porta"]! += 1
+            }
+            objectColorMap["porta \(occorrenze["porta"]!)"] = color
+            
+            elementsToRender.append((priority: priority, render: {
+                self.drawDoor(door, color: color, context: context,
+                              sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            }))
+        }
+        
+        for object in result.objects {
+            let categoryName = getCategoryName(object.category)
+            let priority = priorityMap[categoryName] ?? 32
+            let color = getColor(object.transform)
+            if occorrenze[categoryName] == nil {
+                occorrenze[categoryName] = 1
+            } else {
+                occorrenze[categoryName]! += 1
+            }
+            objectColorMap["\(categoryName) \(occorrenze[categoryName]!)"] = color
+            
+            elementsToRender.append((priority: priority, render: {
+                self.drawObject(object, color: color, context: context,
+                               sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            }))
+        }
+        
+ 
+        elementsToRender.sort { $0.priority < $1.priority }
+        
+        for element in elementsToRender {
+            element.render()
+        }
+        
+        let colorMap = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        let template = createTemplateFromColorMap(colorMap)
+        
+        return (template, colorMap)
+    }
+    
+    private func drawWall(_ wall: CapturedRoom.Surface, color: [Int], context: CGContext,
+                          sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
+        let position = simd_float3(wall.transform.columns.3.x, wall.transform.columns.3.y, wall.transform.columns.3.z)
+        
+        let x = CGFloat((position.x - sceneCenter.x) / maxDimension + 0.5) * size.width
+        let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
+        
+        let width = CGFloat(wall.dimensions.x / maxDimension) * size.width
+        let thickness = CGFloat(0.1 / maxDimension) * size.width
+        
+        let rotation = atan2(wall.transform.columns.0.z, wall.transform.columns.0.x)
+        
+        context.saveGState()
+        context.translateBy(x: x, y: z)
+        context.rotate(by: CGFloat(rotation))
+        
+        let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
+        context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
+                                    green: CGFloat(color[1])/255.0,
+                                    blue: CGFloat(color[2])/255.0,
+                                    alpha: 1.0).cgColor)
+        context.fill(rect)
+        
+        context.restoreGState()
+    }
+    
+    private func drawWindow(_ window: CapturedRoom.Surface, color: [Int], context: CGContext,
+                            sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
+        let position = simd_float3(window.transform.columns.3.x, window.transform.columns.3.y, window.transform.columns.3.z)
+        
+        let x = CGFloat((position.x - sceneCenter.x) / maxDimension + 0.5) * size.width
+        let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
+        
+        let width = CGFloat(window.dimensions.x / maxDimension) * size.width
+        let thickness = CGFloat(0.05 / maxDimension) * size.width
+        
+        let rotation = atan2(window.transform.columns.0.z, window.transform.columns.0.x)
+        
+        context.saveGState()
+        context.translateBy(x: x, y: z)
+        context.rotate(by: CGFloat(rotation))
+        
+        let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
+        context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
+                                    green: CGFloat(color[1])/255.0,
+                                    blue: CGFloat(color[2])/255.0,
+                                    alpha: 1.0).cgColor)
+        context.fill(rect)
+        
+        context.restoreGState()
+    }
+    
+    private func drawDoor(_ door: CapturedRoom.Surface, color: [Int], context: CGContext,
+                          sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
+        let position = simd_float3(door.transform.columns.3.x, door.transform.columns.3.y, door.transform.columns.3.z)
+        
+        let x = CGFloat((position.x - sceneCenter.x) / maxDimension + 0.5) * size.width
+        let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
+        
+        let width = CGFloat(door.dimensions.x / maxDimension) * size.width
+        let thickness = CGFloat(0.08 / maxDimension) * size.width
+        
+        let rotation = atan2(door.transform.columns.0.z, door.transform.columns.0.x)
+        
+        context.saveGState()
+        context.translateBy(x: x, y: z)
+        context.rotate(by: CGFloat(rotation))
+        
+        let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
+        context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
+                                    green: CGFloat(color[1])/255.0,
+                                    blue: CGFloat(color[2])/255.0,
+                                    alpha: 1.0).cgColor)
+        context.fill(rect)
+        
+        context.restoreGState()
+    }
+    
+    private func drawObject(_ object: CapturedRoom.Object, color: [Int], context: CGContext,
+                           sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
+        let position = simd_float3(object.transform.columns.3.x, object.transform.columns.3.y, object.transform.columns.3.z)
+        
+        let x = CGFloat((position.x - sceneCenter.x) / maxDimension + 0.5) * size.width
+        let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
+        
+        let width = CGFloat(object.dimensions.x / maxDimension) * size.width
+        let depth = CGFloat(object.dimensions.z / maxDimension) * size.height
+        
+        let rotation = atan2(object.transform.columns.0.z, object.transform.columns.0.x)
+        
+        context.saveGState()
+        context.translateBy(x: x, y: z)
+        context.rotate(by: CGFloat(rotation))
+        
+        let rect = CGRect(x: -width/2, y: -depth/2, width: width, height: depth)
+        context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
+                                    green: CGFloat(color[1])/255.0,
+                                    blue: CGFloat(color[2])/255.0,
+                                    alpha: 1.0).cgColor)
+        context.fill(rect)
+        
+        context.restoreGState()
+    }
+    
+    private func createTemplateFromColorMap(_ colorMap: UIImage?) -> UIImage? {
+        guard let colorMap = colorMap,
+              let cgImage = colorMap.cgImage else { return nil }
+        
+        let width = cgImage.width
+        let height = cgImage.height
+        let scale = colorMap.scale
+        
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        guard let imageWithWhiteBG = context.makeImage() else { return nil }
+        
+        guard let grayContext = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return nil }
+        
+        grayContext.draw(imageWithWhiteBG, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        guard let finalImage = grayContext.makeImage() else { return nil }
+        
+        return UIImage(cgImage: finalImage, scale: scale, orientation: colorMap.imageOrientation)
+    }
+    
+    private func createCamIOData(from result: CapturedRoom) -> CamIOData {
+        var hotspots: [CamIOHotspot] = []
+        
+        for (name, color) in objectColorMap {
+            let hotspot = CamIOHotspot(
+                color: color,
+                hotspotTitle: name,
+                hotspotDescription: "",
+                sound: nil
+            )
+            hotspots.append(hotspot)
+        }
+        
+        let formatter = ISO8601DateFormatter()
+        let now = formatter.string(from: Date())
+        
+        return CamIOData(
+            title: "Scansione Stanza",
+            shortDescription: "Mappa tattile interattiva",
+            longDescription: "Scansione 3D della stanza convertita in mappa tattile",
+            creationDate: now,
+            lastUpdate: now,
+            lang: "it",
+            hotspots: hotspots
+        )
+    }
+    
+    private func createCamIOFile(template: UIImage, colorMap: UIImage, data: CamIOData) -> URL? {
+        let tempDir = FileManager.default.temporaryDirectory
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let camioURL = tempDir.appendingPathComponent("room_\(timestamp).camio")
+        
+        do {
+            guard let archive = Archive(url: camioURL, accessMode: .create) else {
+                return nil
+            }
+            
+            if let templateData = template.pngData() {
+                try archive.addEntry(with: "template.png", type: .file, uncompressedSize: UInt32(templateData.count), provider: { position, size in
+                    return templateData.subdata(in: position..<position+size)
+                })
+            }
+            
+            if let colorMapData = colorMap.pngData() {
+                try archive.addEntry(with: "colorMap.png", type: .file, uncompressedSize: UInt32(colorMapData.count), provider: { position, size in
+                    return colorMapData.subdata(in: position..<position+size)
+                })
+            }
+            
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let jsonData = try encoder.encode(data)
+            try archive.addEntry(with: "data.json", type: .file, uncompressedSize: UInt32(jsonData.count), provider: { position, size in
+                return jsonData.subdata(in: position..<position+size)
+            })
+            
+            let emptyData = Data()
+            try archive.addEntry(
+                with: "sounds/.keep",
+                type: .file,
+                uncompressedSize: UInt32(emptyData.count),
+                compressionMethod: .none,
+                provider: { position, size in
+                    return emptyData.subdata(in: position..<position+size)
+                }
+            )
+            
+            return camioURL
+            
+        } catch {
+            print("Errore creazione .camio: \(error)")
+            return nil
+        }
+    }
+    
+    private func getColor(_ transform: simd_float4x4) -> [Int] {
+        let x = transform.columns.3.x
+        let y = transform.columns.3.y
+        let z = transform.columns.3.z
+        
+        let seed = abs(Int(x * 1000) + Int(y * 1000) * 31 + Int(z * 1000) * 97)
+        
+        let r = (seed * 17) % 256
+        let g = (seed * 23) % 256
+        let b = (seed * 31) % 256
+        
+        let luminance = 0.2126 * Float(r) + 0.7152 * Float(g) + 0.0722 * Float(b)
+        
+        let targetLuminance = Float(Int(luminance) % 126 + 25) // 25-150
+        let scale = targetLuminance / luminance
+        
+        let finalR = max(0, min(255, Int(Float(r) * scale)))
+        let finalG = max(0, min(255, Int(Float(g) * scale)))
+        let finalB = max(0, min(255, Int(Float(b) * scale)))
+        
+        return [finalR, finalG, finalB]
+    }
+    
+    private func getCategoryName(_ category: CapturedRoom.Object.Category) -> String {
+        switch category {
+        case .storage: return "Armadio"
+        case .refrigerator: return "Frigorifero"
+        case .stove: return "Fornello"
+        case .bed: return "Letto"
+        case .sink: return "Lavandino"
+        case .washerDryer: return "Lavatrice"
+        case .toilet: return "WC"
+        case .bathtub: return "Vasca"
+        case .oven: return "Forno"
+        case .dishwasher: return "Lavastoviglie"
+        case .table: return "Tavolo"
+        case .sofa: return "Divano"
+        case .chair: return "Sedia"
+        case .fireplace: return "Camino"
+        case .television: return "TV"
+        case .stairs: return "Scale"
+        @unknown default: return "Oggetto"
+        }
+    }
+}
