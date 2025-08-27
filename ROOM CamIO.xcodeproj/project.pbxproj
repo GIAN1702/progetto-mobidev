@@ -58,7 +58,7 @@
 			isa = PBXGroup;
 			children = (
 				05C7567A6B268FC70FFB0FCC /* README.md */,
-				ACEF94AF2820AD2300776A9D /* RoomPlanExampleApp */,
+				ACEF94AF2820AD2300776A9D /* ROOM CamIO app */,
 				ACEF94AE2820AD2300776A9D /* Products */,
 				0ED4ADFE8897242ABECFB073 /* Configuration */,
 				C4CB873CC14D1C6A55335C8A /* LICENSE */,
@@ -73,7 +73,7 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		ACEF94AF2820AD2300776A9D /* RoomPlanExampleApp */ = {
+		ACEF94AF2820AD2300776A9D /* ROOM CamIO app */ = {
 			isa = PBXGroup;
 			children = (
 				ACEF94B02820AD2300776A9D /* AppDelegate.swift */,
@@ -86,7 +86,7 @@
 				ACEF94BB2820AD2400776A9D /* LaunchScreen.storyboard */,
 				ACEF94BE2820AD2400776A9D /* Info.plist */,
 			);
-			path = RoomPlanExampleApp;
+			path = "ROOM CamIO app";
 			sourceTree = "<group>";
 		};
 		C4CB873CC14D1C6A55335C8A /* LICENSE */ = {

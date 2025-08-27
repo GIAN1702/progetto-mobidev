@@ -136,8 +136,8 @@ extension RoomCaptureViewController {
         
         // Mostra indicatore di caricamento
         let loadingAlert = UIAlertController(
-            title: "Esportazione",
-            message: "Creazione file .camio in corso...",
+            title: "Export",
+            message: "Generating .camio file...",
             preferredStyle: .alert
         )
         present(loadingAlert, animated: true)
@@ -158,8 +158,8 @@ extension RoomCaptureViewController {
                 DispatchQueue.main.async {
                     loadingAlert.dismiss(animated: true) {
                         let alert = UIAlertController(
-                            title: "Errore",
-                            message: "Impossibile creare il file .camio",
+                            title: "Error",
+                            message: "Is not possible to generate the file",
                             preferredStyle: .alert
                         )
                         alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -174,27 +174,27 @@ extension RoomCaptureViewController {
 class RoomPlanToCamIOConverter {
     
     private let priorityMap: [String: Int] = [
-        "muro": 1,
-        "Pavimento": 2,
-        "Scale": 10,
-        "Armadio": 20,
-        "Camino": 21,
-        "Sedia": 30,
-        "Divano": 30,
-        "Letto": 30,
-        "Tavolo": 31,
+        "Wall": 1,
+        "Floor": 2,
+        "Stairs": 10,
+        "Storage": 20,
+        "Fireplace": 21,
+        "Chair": 30,
+        "Sofa": 30,
+        "Bed": 30,
+        "Table": 31,
         "TV": 32,
-        "Oggetto": 32,
-        "Vasca": 39,
-        "Frigorifero": 40,
-        "Fornello": 40,
-        "Forno": 40,
-        "Lavastoviglie": 40,
-        "Lavatrice": 40,
-        "porta": 50,
-        "finestra": 50,
-        "Lavandino": 50,
-        "WC": 50
+        "Object": 32,
+        "Bathtub": 39,
+        "Refrigetator": 40,
+        "Stove": 40,
+        "Oven": 40,
+        "Dishwasher": 40,
+        "Washmachine": 40,
+        "door": 50,
+        "Window": 50,
+        "Sink": 50,
+        "Toilet": 50
     ]
     
     private var objectColorMap: [String: [Int]] = [:]
@@ -246,14 +246,14 @@ class RoomPlanToCamIOConverter {
         var elementsToRender: [(priority: Int, render: () -> Void)] = []
         
         for (_, surface) in result.walls.enumerated() {
-            let priority = priorityMap["muro"] ?? 1
+            let priority = priorityMap["Wall"] ?? 1
             let color = getColor(surface.transform)
-            if occorrenze["muro"] == nil {
-                occorrenze["muro"] = 1
+            if occorrenze["Wall"] == nil {
+                occorrenze["Wall"] = 1
             } else {
-                occorrenze["muro"]! += 1
+                occorrenze["Wall"]! += 1
             }
-            objectColorMap["muro \(occorrenze["muro"]!)"] = color
+            objectColorMap["Wall \(occorrenze["Wall"]!)"] = color
             
             elementsToRender.append((priority: priority, render: {
                 self.drawWall(surface, color: color, context: context,
@@ -262,14 +262,14 @@ class RoomPlanToCamIOConverter {
         }
         
         for (_, window) in result.windows.enumerated() {
-            let priority = priorityMap["finestra"] ?? 50
+            let priority = priorityMap["Window"] ?? 50
             let color = getColor(window.transform)
-            if occorrenze["finestra"] == nil {
-                occorrenze["finestra"] = 1
+            if occorrenze["Window"] == nil {
+                occorrenze["Window"] = 1
             } else {
-                occorrenze["finestra"]! += 1
+                occorrenze["Window"]! += 1
             }
-            objectColorMap["finestra \(occorrenze["finestra"]!)"] = color
+            objectColorMap["Window \(occorrenze["Window"]!)"] = color
             
             elementsToRender.append((priority: priority, render: {
                 self.drawWindow(window, color: color, context: context,
@@ -278,14 +278,14 @@ class RoomPlanToCamIOConverter {
         }
         
         for (_, door) in result.doors.enumerated() {
-            let priority = priorityMap["porta"] ?? 50
+            let priority = priorityMap["Door"] ?? 50
             let color = getColor(door.transform)
-            if occorrenze["porta"] == nil {
-                occorrenze["porta"] = 1
+            if occorrenze["Door"] == nil {
+                occorrenze["Door"] = 1
             } else {
-                occorrenze["porta"]! += 1
+                occorrenze["Door"]! += 1
             }
-            objectColorMap["porta \(occorrenze["porta"]!)"] = color
+            objectColorMap["Door \(occorrenze["Door"]!)"] = color
             
             elementsToRender.append((priority: priority, render: {
                 self.drawDoor(door, color: color, context: context,
@@ -490,12 +490,12 @@ class RoomPlanToCamIOConverter {
         let now = formatter.string(from: Date())
         
         return CamIOData(
-            title: "Scansione Stanza",
-            shortDescription: "Mappa tattile interattiva",
-            longDescription: "Scansione 3D della stanza convertita in mappa tattile",
+            title: "Room Scan",
+            shortDescription: "Tactile map",
+            longDescription: "3D scan of the room converted to a tactile map",
             creationDate: now,
             lastUpdate: now,
-            lang: "it",
+            lang: "en",
             hotspots: hotspots
         )
     }
@@ -543,7 +543,7 @@ class RoomPlanToCamIOConverter {
             return camioURL
             
         } catch {
-            print("Errore creazione .camio: \(error)")
+            print("Error generating .camio: \(error)")
             return nil
         }
     }
@@ -573,23 +573,23 @@ class RoomPlanToCamIOConverter {
     
     private func getCategoryName(_ category: CapturedRoom.Object.Category) -> String {
         switch category {
-        case .storage: return "Armadio"
-        case .refrigerator: return "Frigorifero"
-        case .stove: return "Fornello"
-        case .bed: return "Letto"
-        case .sink: return "Lavandino"
-        case .washerDryer: return "Lavatrice"
-        case .toilet: return "WC"
-        case .bathtub: return "Vasca"
-        case .oven: return "Forno"
-        case .dishwasher: return "Lavastoviglie"
-        case .table: return "Tavolo"
-        case .sofa: return "Divano"
-        case .chair: return "Sedia"
-        case .fireplace: return "Camino"
+        case .storage: return "Storage"
+        case .refrigerator: return "Refrigetator"
+        case .stove: return "Stove"
+        case .bed: return "Bed"
+        case .sink: return "Sink"
+        case .washerDryer: return "Washmachine"
+        case .toilet: return "Toilet"
+        case .bathtub: return "Bathtub"
+        case .oven: return "Oven"
+        case .dishwasher: return "Dishwasher"
+        case .table: return "Table"
+        case .sofa: return "Sofa"
+        case .chair: return "Chair"
+        case .fireplace: return "Fireplace"
         case .television: return "TV"
-        case .stairs: return "Scale"
-        @unknown default: return "Oggetto"
+        case .stairs: return "Stairs"
+        @unknown default: return "Object"
         }
     }
 }
