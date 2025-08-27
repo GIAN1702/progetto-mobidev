@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "ACEF94AC2820AD2300776A9D"
-               BuildableName = "RoomPlanExampleApp.app"
-               BlueprintName = "RoomPlanExampleApp"
-               ReferencedContainer = "container:RoomPlanExampleApp.xcodeproj">
+               BuildableName = "ROOM CamIO.app"
+               BlueprintName = "ROOM CamIO"
+               ReferencedContainer = "container:ROOM CamIO.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,9 +46,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "ACEF94AC2820AD2300776A9D"
-            BuildableName = "RoomPlanExampleApp.app"
-            BlueprintName = "RoomPlanExampleApp"
-            ReferencedContainer = "container:RoomPlanExampleApp.xcodeproj">
+            BuildableName = "ROOM CamIO.app"
+            BlueprintName = "ROOM CamIO"
+            ReferencedContainer = "container:ROOM CamIO.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -63,9 +63,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "ACEF94AC2820AD2300776A9D"
-            BuildableName = "RoomPlanExampleApp.app"
-            BlueprintName = "RoomPlanExampleApp"
-            ReferencedContainer = "container:RoomPlanExampleApp.xcodeproj">
+            BuildableName = "ROOM CamIO.app"
+            BlueprintName = "ROOM CamIO"
+            ReferencedContainer = "container:ROOM CamIO.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
@@ -74,6 +74,7 @@
    </AnalyzeAction>
    <ArchiveAction
       buildConfiguration = "Release"
+      customArchiveName = "ROOM CamIO"
       revealArchiveInOrganizer = "YES">
    </ArchiveAction>
 </Scheme>
