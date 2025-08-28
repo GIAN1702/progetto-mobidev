@@ -1,8 +1,7 @@
-# Create a 3D model of an interior room by guiding the user through an AR experience
+# Create a .camio project from a lidar scan of a room
 
-Highlight physical structures and display text that guides a user to scan the shape of their physical environment using a framework-provided view.
+the app is a prototype based on the apple Roomplan example app
 
-For more information about the app and how it works, see
-[Create a 3D model of an interior room by guiding the user through an AR experience]
-(https://developer.apple.com/documentation/roomplan/create_a_3d_model_of_an_interior_room_by_guiding_the_user_through_an_ar_experience) in the
-developer documentation.
+the apps works thanks to the Roomplan framework and the CamIO platform (https://develop.ewlab.di.unimi.it/camio/)
+this can only run on iphone pro (12 or later) and ipad pro (4)
+to export the .camio file you have to share it wherever you need to
