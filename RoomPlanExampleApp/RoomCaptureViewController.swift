@@ -209,7 +209,7 @@ class RoomPlanToCamIOConverter {
             return nil
         }
         
-        let data = createCamIOData(from: result)
+        let data = createCamIOData()
         
         return createCamIOFile(template: template, colorMap: colorMap, data: data)
     }
@@ -473,7 +473,7 @@ class RoomPlanToCamIOConverter {
         return UIImage(cgImage: finalImage, scale: scale, orientation: colorMap.imageOrientation)
     }
     
-    private func createCamIOData(from result: CapturedRoom) -> CamIOData {
+    private func createCamIOData() -> CamIOData {
         var hotspots: [CamIOHotspot] = []
         
         for (name, color) in objectColorMap {
