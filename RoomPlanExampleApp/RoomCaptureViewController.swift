@@ -5,6 +5,9 @@ Abstract:
 The sample app's main view controller that manages the scanning process.
 */
 
+let SPESSORE:CGFloat = 20.0
+let DIMENSIONE_CROCETTA:CGFloat = 60.0 // Dimensione delle crocette agli angoli
+
 import UIKit
 import RoomPlan
 import SceneKit
@@ -336,11 +339,88 @@ class RoomPlanToCamIOConverter {
         for element in elementsToRender {
             element.render[1](context)
         }
-        let template = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
         
-        return (template, colorMap)
-    }
+        drawCornerCrosses(context: context, size: size)
+           
+           let template = UIGraphicsGetImageFromCurrentImageContext()
+           UIGraphicsEndImageContext()
+           
+           return (template, colorMap)
+       }
+       
+       private func drawCornerCrosses(context: CGContext, size: CGSize) {
+           let margin: CGFloat = 30.0
+           var smallShapeSize: CGFloat = 80.0
+           let spacing: CGFloat = 5.0
+           
+           let fontSize: CGFloat = 50.0
+           
+           // Configura lo stile del testo
+           let paragraphStyle = NSMutableParagraphStyle()
+           paragraphStyle.alignment = .left
+           
+           let attributes: [NSAttributedString.Key: Any] = [
+               .font: UIFont.boldSystemFont(ofSize: fontSize),
+               .foregroundColor: UIColor.black,
+               .paragraphStyle: paragraphStyle
+           ]
+           
+        
+           // Angolo in alto a destra
+           let topRight = "CamIO Explorer" as NSString
+           let topRightSize = topRight.size(withAttributes: attributes)
+           topRight.draw(at: CGPoint(x: size.width - margin - topRightSize.width, y: margin), withAttributes: attributes)
+           
+           // Angolo in basso a sinistra
+           let bottomLeft = "University of Milan" as NSString
+           let bottomLeftSize = bottomLeft.size(withAttributes: attributes)
+           bottomLeft.draw(at: CGPoint(x: margin, y: size.height - margin - bottomLeftSize.height), withAttributes: attributes)
+           
+           
+           // Angolo in alto a sinistra - 4 QUADRATI con intensità diverse
+           // Quadrato in alto a sinistra (intensità 0% = bianco)
+           context.setFillColor(UIColor(white: 0.0, alpha: 1.0).cgColor)
+           context.fill(CGRect(x: margin, y: margin, width: smallShapeSize, height: smallShapeSize))
+           
+           // Quadrato in alto a destra (intensità 25% = grigio chiaro)
+           context.setFillColor(UIColor(white: 0.50, alpha: 1.0).cgColor)
+           context.fill(CGRect(x: margin + smallShapeSize + spacing, y: margin,
+                              width: smallShapeSize, height: smallShapeSize))
+           
+           // Quadrato in basso a sinistra (intensità 50% = grigio medio)
+           context.setFillColor(UIColor(white: 0.8, alpha: 1.0).cgColor)
+           context.fill(CGRect(x: margin, y: margin + smallShapeSize + spacing,
+                              width: smallShapeSize, height: smallShapeSize))
+           
+           smallShapeSize = 40.0
+                      
+           // Angolo in basso a destra - 4 CERCHI con intensità diverse
+           let bottomRightX = size.width - margin - (2 * smallShapeSize + spacing)
+           let bottomRightY = size.height - margin - (2 * smallShapeSize + spacing)
+           
+           // Cerchio in alto a sinistra (intensità 0% = bianco)
+           context.setFillColor(UIColor(white: 1.0, alpha: 1.0).cgColor)
+           context.fillEllipse(in: CGRect(x: bottomRightX, y: bottomRightY,
+                                         width: smallShapeSize, height: smallShapeSize))
+           
+           // Cerchio in alto a destra (intensità 25% = grigio chiaro)
+           context.setFillColor(UIColor(white: 0.75, alpha: 1.0).cgColor)
+           context.fillEllipse(in: CGRect(x: bottomRightX + smallShapeSize + spacing, y: bottomRightY,
+                                         width: smallShapeSize, height: smallShapeSize))
+           
+           // Cerchio in basso a sinistra (intensità 50% = grigio medio)
+           context.setFillColor(UIColor(white: 0.5, alpha: 1.0).cgColor)
+           context.fillEllipse(in: CGRect(x: bottomRightX, y: bottomRightY + smallShapeSize + spacing,
+                                         width: smallShapeSize, height: smallShapeSize))
+           
+           // Cerchio in basso a destra (intensità 100% = nero)
+           context.setFillColor(UIColor(white: 0.0, alpha: 1.0).cgColor)
+           context.fillEllipse(in: CGRect(x: bottomRightX + smallShapeSize + spacing,
+                                         y: bottomRightY + smallShapeSize + spacing,
+                                         width: smallShapeSize, height: smallShapeSize))
+       }
+    
+
     
     private func drawWall(_ wall: CapturedRoom.Surface, color: [Int], context: CGContext,
                           sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
@@ -350,7 +430,7 @@ class RoomPlanToCamIOConverter {
         let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
         
         let width = CGFloat(wall.dimensions.x / maxDimension) * size.width
-        let thickness = CGFloat(0.1 / maxDimension) * size.width
+        let thickness = CGFloat(0.3 / maxDimension) * size.width
         
         let rotation = atan2(wall.transform.columns.0.z, wall.transform.columns.0.x)
         
@@ -358,17 +438,20 @@ class RoomPlanToCamIOConverter {
         context.translateBy(x: x, y: z)
         context.rotate(by: CGFloat(rotation))
         
-        let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
-        context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
-                                    green: CGFloat(color[1])/255.0,
-                                    blue: CGFloat(color[2])/255.0,
-                                    alpha: 1.0).cgColor)
-        context.fill(rect)
         
         if (color == [255,255,255]){
             context.setStrokeColor(UIColor.black.cgColor)
-            context.setLineWidth(1.0)  // Bordo sottile per oggetti
-            context.stroke(rect)
+            context.setLineWidth(SPESSORE)
+            context.move(to: CGPoint(x: -width/2, y: 0))
+            context.addLine(to: CGPoint(x: width/2, y: 0))
+            context.strokePath()
+        }else{
+            let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
+            context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
+                                        green: CGFloat(color[1])/255.0,
+                                        blue: CGFloat(color[2])/255.0,
+                                        alpha: 1.0).cgColor)
+            context.fill(rect)
         }
         context.restoreGState()
     }
@@ -381,7 +464,7 @@ class RoomPlanToCamIOConverter {
         let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
         
         let width = CGFloat(window.dimensions.x / maxDimension) * size.width
-        let thickness = CGFloat(0.1 / maxDimension) * size.width
+        let thickness = CGFloat(0.3 / maxDimension) * size.width
         
         let rotation = atan2(window.transform.columns.0.z, window.transform.columns.0.x)
         
@@ -389,16 +472,20 @@ class RoomPlanToCamIOConverter {
         context.translateBy(x: x, y: z)
         context.rotate(by: CGFloat(rotation))
         
-        let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
-        context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
-                                    green: CGFloat(color[1])/255.0,
-                                    blue: CGFloat(color[2])/255.0,
-                                    alpha: 1.0).cgColor)
-        context.fill(rect)
+
         if (color == [255,255,255]){
             context.setStrokeColor(UIColor.black.cgColor)
-            context.setLineWidth(1.0)  // Bordo sottile per oggetti
-            context.stroke(rect)
+            context.setLineWidth(SPESSORE)
+            context.move(to: CGPoint(x: -width/2, y: 0))
+            context.addLine(to: CGPoint(x: width/2, y: 0))
+            context.strokePath()
+        }else{
+            let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
+            context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
+                                        green: CGFloat(color[1])/255.0,
+                                        blue: CGFloat(color[2])/255.0,
+                                        alpha: 1.0).cgColor)
+            context.fill(rect)
         }
         
         context.restoreGState()
@@ -412,7 +499,7 @@ class RoomPlanToCamIOConverter {
         let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
         
         let width = CGFloat(door.dimensions.x / maxDimension) * size.width
-        let thickness = CGFloat(0.12 / maxDimension) * size.width
+        let thickness = CGFloat(0.4 / maxDimension) * size.width
         
         let rotation = atan2(door.transform.columns.0.z, door.transform.columns.0.x)
         
@@ -427,21 +514,6 @@ class RoomPlanToCamIOConverter {
                                     alpha: 1.0).cgColor)
         context.fill(rect)
         
-        // Disegna i bordi neri sui lati corti con stroke
-        if (color == [255,255,255]){
-            context.setStrokeColor(UIColor.black.cgColor)
-            context.setLineWidth(1.0)
-            
-            // Lato sinistro (lato corto)
-            context.move(to: CGPoint(x: -width/2, y: -(thickness/2)+0.02))
-            context.addLine(to: CGPoint(x: -width/2, y: (thickness/2)-0.02))
-            context.strokePath()
-            
-            // Lato destro (lato corto)
-            context.move(to: CGPoint(x: width/2, y: (-thickness/2)+0.02))
-            context.addLine(to: CGPoint(x: width/2, y: (thickness/2)-0.02))
-            context.strokePath()
-        }
         
         context.restoreGState()
     }
@@ -470,7 +542,7 @@ class RoomPlanToCamIOConverter {
         context.fill(rect)
         if (color == [255,255,255]){
             context.setStrokeColor(UIColor.black.cgColor)
-            context.setLineWidth(1.0)  // Bordo sottile per oggetti
+            context.setLineWidth(SPESSORE)
             context.stroke(rect)
         }
         
