@@ -174,8 +174,7 @@ extension RoomCaptureViewController {
 class RoomPlanToCamIOConverter {
     
     private let priorityMap: [String: Int] = [
-        "Wall": 1,
-        "Floor": 2,
+        "Wall": 51,
         "Stairs": 10,
         "Storage": 20,
         "Fireplace": 21,
@@ -191,8 +190,8 @@ class RoomPlanToCamIOConverter {
         "Oven": 40,
         "Dishwasher": 40,
         "Washmachine": 40,
-        "door": 50,
-        "Window": 50,
+        "Door": 53,
+        "Window": 52,
         "Sink": 50,
         "Toilet": 50
     ]
@@ -243,7 +242,7 @@ class RoomPlanToCamIOConverter {
         context.setFillColor(UIColor.white.cgColor)
         context.fill(CGRect(origin: .zero, size: size))
         
-        var elementsToRender: [(priority: Int, render: () -> Void)] = []
+        var elementsToRender: [(priority: Int, render: [(CGContext) -> Void])] = []
         
         for (_, surface) in result.walls.enumerated() {
             let priority = priorityMap["Wall"] ?? 1
@@ -255,10 +254,12 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["Wall \(occorrenze["Wall"]!)"] = color
             
-            elementsToRender.append((priority: priority, render: {
-                self.drawWall(surface, color: color, context: context,
+            elementsToRender.append((priority: priority, render: [{
+               context in self.drawWall(surface, color: color, context: context,
                              sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-            }))
+            },{context in self.drawWall(surface, color: [255,255,255], context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            }]))
         }
         
         for (_, window) in result.windows.enumerated() {
@@ -271,10 +272,12 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["Window \(occorrenze["Window"]!)"] = color
             
-            elementsToRender.append((priority: priority, render: {
-                self.drawWindow(window, color: color, context: context,
-                               sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-            }))
+            elementsToRender.append((priority: priority, render: [{
+                context in self.drawWindow(window, color: color, context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            },{context in self.drawWindow(window, color: [255,255,255], context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            }]))
         }
         
         for (_, door) in result.doors.enumerated() {
@@ -287,10 +290,12 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["Door \(occorrenze["Door"]!)"] = color
             
-            elementsToRender.append((priority: priority, render: {
-                self.drawDoor(door, color: color, context: context,
-                              sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-            }))
+            elementsToRender.append((priority: priority, render: [{
+               context in self.drawDoor(door, color: color, context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            },{context in self.drawDoor(door, color: [255,255,255], context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            }]))
         }
         
         for object in result.objects {
@@ -304,23 +309,35 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["\(categoryName) \(occorrenze[categoryName]!)"] = color
             
-            elementsToRender.append((priority: priority, render: {
-                self.drawObject(object, color: color, context: context,
-                               sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-            }))
+            elementsToRender.append((priority: priority, render: [{
+                context in self.drawObject(object, color: color, context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            },{context in self.drawObject(object, color: [255,255,255], context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+            }]))
         }
         
  
         elementsToRender.sort { $0.priority < $1.priority }
         
         for element in elementsToRender {
-            element.render()
+            element.render[0](context)
         }
         
         let colorMap = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
         
-        let template = createTemplateFromColorMap(colorMap)
+        UIGraphicsBeginImageContextWithOptions(size, true, 1.0)
+        guard let context = UIGraphicsGetCurrentContext() else { return (nil, nil) }
+        
+        context.setFillColor(UIColor.white.cgColor)
+        context.fill(CGRect(origin: .zero, size: size))
+        
+        for element in elementsToRender {
+            element.render[1](context)
+        }
+        let template = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
         
         return (template, colorMap)
     }
@@ -348,6 +365,11 @@ class RoomPlanToCamIOConverter {
                                     alpha: 1.0).cgColor)
         context.fill(rect)
         
+        if (color == [255,255,255]){
+            context.setStrokeColor(UIColor.black.cgColor)
+            context.setLineWidth(1.0)  // Bordo sottile per oggetti
+            context.stroke(rect)
+        }
         context.restoreGState()
     }
     
@@ -359,7 +381,7 @@ class RoomPlanToCamIOConverter {
         let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
         
         let width = CGFloat(window.dimensions.x / maxDimension) * size.width
-        let thickness = CGFloat(0.05 / maxDimension) * size.width
+        let thickness = CGFloat(0.1 / maxDimension) * size.width
         
         let rotation = atan2(window.transform.columns.0.z, window.transform.columns.0.x)
         
@@ -373,6 +395,11 @@ class RoomPlanToCamIOConverter {
                                     blue: CGFloat(color[2])/255.0,
                                     alpha: 1.0).cgColor)
         context.fill(rect)
+        if (color == [255,255,255]){
+            context.setStrokeColor(UIColor.black.cgColor)
+            context.setLineWidth(1.0)  // Bordo sottile per oggetti
+            context.stroke(rect)
+        }
         
         context.restoreGState()
     }
@@ -385,7 +412,7 @@ class RoomPlanToCamIOConverter {
         let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
         
         let width = CGFloat(door.dimensions.x / maxDimension) * size.width
-        let thickness = CGFloat(0.08 / maxDimension) * size.width
+        let thickness = CGFloat(0.12 / maxDimension) * size.width
         
         let rotation = atan2(door.transform.columns.0.z, door.transform.columns.0.x)
         
@@ -399,6 +426,22 @@ class RoomPlanToCamIOConverter {
                                     blue: CGFloat(color[2])/255.0,
                                     alpha: 1.0).cgColor)
         context.fill(rect)
+        
+        // Disegna i bordi neri sui lati corti con stroke
+        if (color == [255,255,255]){
+            context.setStrokeColor(UIColor.black.cgColor)
+            context.setLineWidth(1.0)
+            
+            // Lato sinistro (lato corto)
+            context.move(to: CGPoint(x: -width/2, y: -(thickness/2)+0.02))
+            context.addLine(to: CGPoint(x: -width/2, y: (thickness/2)-0.02))
+            context.strokePath()
+            
+            // Lato destro (lato corto)
+            context.move(to: CGPoint(x: width/2, y: (-thickness/2)+0.02))
+            context.addLine(to: CGPoint(x: width/2, y: (thickness/2)-0.02))
+            context.strokePath()
+        }
         
         context.restoreGState()
     }
@@ -425,53 +468,15 @@ class RoomPlanToCamIOConverter {
                                     blue: CGFloat(color[2])/255.0,
                                     alpha: 1.0).cgColor)
         context.fill(rect)
+        if (color == [255,255,255]){
+            context.setStrokeColor(UIColor.black.cgColor)
+            context.setLineWidth(1.0)  // Bordo sottile per oggetti
+            context.stroke(rect)
+        }
         
         context.restoreGState()
     }
     
-    private func createTemplateFromColorMap(_ colorMap: UIImage?) -> UIImage? {
-        guard let colorMap = colorMap,
-              let cgImage = colorMap.cgImage else { return nil }
-        
-        let width = cgImage.width
-        let height = cgImage.height
-        let scale = colorMap.scale
-        
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width * 4,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
-        
-        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        
-
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        
-        guard let imageWithWhiteBG = context.makeImage() else { return nil }
-        
-        guard let grayContext = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width,
-            space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ) else { return nil }
-        
-        grayContext.draw(imageWithWhiteBG, in: CGRect(x: 0, y: 0, width: width, height: height))
-        
-        guard let finalImage = grayContext.makeImage() else { return nil }
-        
-        return UIImage(cgImage: finalImage, scale: scale, orientation: colorMap.imageOrientation)
-    }
     
     private func createCamIOData() -> CamIOData {
         var hotspots: [CamIOHotspot] = []
@@ -503,7 +508,7 @@ class RoomPlanToCamIOConverter {
     private func createCamIOFile(template: UIImage, colorMap: UIImage, data: CamIOData) -> URL? {
         let tempDir = FileManager.default.temporaryDirectory
         let timestamp = Int(Date().timeIntervalSince1970)
-        let camioURL = tempDir.appendingPathComponent("room_\(timestamp).camio")
+        let camioURL = tempDir.appendingPathComponent("room_\(timestamp).zip")
         
         do {
             guard let archive = Archive(url: camioURL, accessMode: .create) else {
