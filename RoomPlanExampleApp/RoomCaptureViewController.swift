@@ -580,7 +580,7 @@ class RoomPlanToCamIOConverter {
     private func createCamIOFile(template: UIImage, colorMap: UIImage, data: CamIOData) -> URL? {
         let tempDir = FileManager.default.temporaryDirectory
         let timestamp = Int(Date().timeIntervalSince1970)
-        let camioURL = tempDir.appendingPathComponent("room_\(timestamp).zip")
+        let camioURL = tempDir.appendingPathComponent("room_\(timestamp).camio")
         
         do {
             guard let archive = Archive(url: camioURL, accessMode: .create) else {
