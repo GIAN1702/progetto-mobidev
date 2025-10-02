@@ -5,35 +5,76 @@ Abstract:
 The sample app's main view controller that manages the scanning process.
 */
 
-let SPESSORE:CGFloat = 20.0
-let DIMENSIONE_CROCETTA:CGFloat = 60.0 // Dimensione delle crocette agli angoli
-
 import UIKit
 import RoomPlan
 import SceneKit
 import ZIPFoundation
 
+let SPESSORE: CGFloat = 20.0
+let DIMENSIONE_CROCETTA: CGFloat = 60.0
+
 class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
     
-    @IBOutlet var exportButton: UIButton?
-    
-    @IBOutlet var doneButton: UIBarButtonItem?
-    @IBOutlet var cancelButton: UIBarButtonItem?
-    @IBOutlet var activityIndicator: UIActivityIndicatorView?
+    // Ora creiamo i bottoni programmaticamente invece di usare IBOutlet
+    private var exportButton: UIButton!
+    private var doneButton: UIBarButtonItem!
+    private var cancelButton: UIBarButtonItem!
+    private var activityIndicator: UIActivityIndicatorView!
     
     private var isScanning: Bool = false
-    
     private var roomCaptureView: RoomCaptureView!
     private var roomCaptureSessionConfig: RoomCaptureSession.Configuration = RoomCaptureSession.Configuration()
-    
     private var finalResults: CapturedRoom?
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Set up after loading the view.
+        setupUI()
         setupRoomCaptureView()
-        activityIndicator?.stopAnimating()
+        activityIndicator.stopAnimating()
+    }
+    
+    private func setupUI() {
+        view.backgroundColor = .systemBackground
+        
+        // Setup navigation bar buttons
+        cancelButton = UIBarButtonItem(title: "Cancel", style: .plain, target: self, action: #selector(cancelScanning))
+        doneButton = UIBarButtonItem(title: "Done", style: .plain, target: self, action: #selector(doneScanning))
+        
+        navigationItem.leftBarButtonItem = cancelButton
+        navigationItem.rightBarButtonItem = doneButton
+        
+        // Setup export button
+        exportButton = UIButton(type: .system)
+        exportButton.setTitle("Export", for: .normal)
+        exportButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
+        exportButton.backgroundColor = .systemBlue
+        exportButton.setTitleColor(.white, for: .normal)
+        exportButton.layer.cornerRadius = 25
+        exportButton.translatesAutoresizingMaskIntoConstraints = false
+        exportButton.alpha = 0.0
+        exportButton.isHidden = true
+        exportButton.addTarget(self, action: #selector(exportResults), for: .touchUpInside)
+        
+        view.addSubview(exportButton)
+        
+        // Setup activity indicator
+        activityIndicator = UIActivityIndicatorView(style: .medium)
+        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
+        activityIndicator.hidesWhenStopped = true
+        
+        view.addSubview(activityIndicator)
+        
+        // Constraints
+        NSLayoutConstraint.activate([
+            exportButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            exportButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            exportButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 150),
+            exportButton.heightAnchor.constraint(equalToConstant: 50),
+            
+            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
     }
     
     private func setupRoomCaptureView() {
@@ -57,41 +98,42 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     private func startSession() {
         isScanning = true
         roomCaptureView?.captureSession.run(configuration: roomCaptureSessionConfig)
-        
         setActiveNavBar()
     }
     
     private func stopSession() {
         isScanning = false
         roomCaptureView?.captureSession.stop()
-        
         setCompleteNavBar()
     }
     
-    // Decide to post-process and show the final results.
     func captureView(shouldPresent roomDataForProcessing: CapturedRoomData, error: Error?) -> Bool {
         return true
     }
     
-    // Access the final post-processed results.
     func captureView(didPresent processedResult: CapturedRoom, error: Error?) {
         finalResults = processedResult
         self.exportButton?.isEnabled = true
         self.activityIndicator?.stopAnimating()
     }
     
-    @IBAction func doneScanning(_ sender: UIBarButtonItem) {
-        if isScanning { stopSession() } else { cancelScanning(sender) }
+    @objc func doneScanning() {
+        if isScanning {
+            stopSession()
+        } else {
+            cancelScanning()
+        }
         self.exportButton?.isEnabled = false
         self.activityIndicator?.startAnimating()
     }
 
-    @IBAction func cancelScanning(_ sender: UIBarButtonItem) {
-        navigationController?.dismiss(animated: true)
+    @objc func cancelScanning() {
+        dismiss(animated: true)
     }
 
-    @IBAction func exportResults(_ sender: UIButton) {
-        exportToCamIO(finalResults!)
+    @objc func exportResults() {
+        guard let results = finalResults else { return }
+        exportToCamIO(results)
     }
     
     private func setActiveNavBar() {
@@ -342,83 +384,83 @@ class RoomPlanToCamIOConverter {
         
         drawCornerCrosses(context: context, size: size)
            
-           let template = UIGraphicsGetImageFromCurrentImageContext()
-           UIGraphicsEndImageContext()
+        let template = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
            
-           return (template, colorMap)
-       }
+        return (template, colorMap)
+    }
        
-       private func drawCornerCrosses(context: CGContext, size: CGSize) {
-           let margin: CGFloat = 30.0
-           var smallShapeSize: CGFloat = 80.0
-           let spacing: CGFloat = 5.0
-           
-           let fontSize: CGFloat = 50.0
-           
-           // Configura lo stile del testo
-           let paragraphStyle = NSMutableParagraphStyle()
-           paragraphStyle.alignment = .left
-           
-           let attributes: [NSAttributedString.Key: Any] = [
-               .font: UIFont.boldSystemFont(ofSize: fontSize),
-               .foregroundColor: UIColor.black,
-               .paragraphStyle: paragraphStyle
-           ]
-           
+    private func drawCornerCrosses(context: CGContext, size: CGSize) {
+        let margin: CGFloat = 30.0
+        var smallShapeSize: CGFloat = 80.0
+        let spacing: CGFloat = 5.0
         
-           // Angolo in alto a destra
-           let topRight = "CamIO Explorer" as NSString
-           let topRightSize = topRight.size(withAttributes: attributes)
-           topRight.draw(at: CGPoint(x: size.width - margin - topRightSize.width, y: margin), withAttributes: attributes)
-           
-           // Angolo in basso a sinistra
-           let bottomLeft = "University of Milan" as NSString
-           let bottomLeftSize = bottomLeft.size(withAttributes: attributes)
-           bottomLeft.draw(at: CGPoint(x: margin, y: size.height - margin - bottomLeftSize.height), withAttributes: attributes)
-           
-           
-           // Angolo in alto a sinistra - 4 QUADRATI con intensità diverse
-           // Quadrato in alto a sinistra (intensità 0% = bianco)
-           context.setFillColor(UIColor(white: 0.0, alpha: 1.0).cgColor)
-           context.fill(CGRect(x: margin, y: margin, width: smallShapeSize, height: smallShapeSize))
-           
-           // Quadrato in alto a destra (intensità 25% = grigio chiaro)
-           context.setFillColor(UIColor(white: 0.50, alpha: 1.0).cgColor)
-           context.fill(CGRect(x: margin + smallShapeSize + spacing, y: margin,
-                              width: smallShapeSize, height: smallShapeSize))
-           
-           // Quadrato in basso a sinistra (intensità 50% = grigio medio)
-           context.setFillColor(UIColor(white: 0.8, alpha: 1.0).cgColor)
-           context.fill(CGRect(x: margin, y: margin + smallShapeSize + spacing,
-                              width: smallShapeSize, height: smallShapeSize))
-           
-           smallShapeSize = 40.0
-                      
-           // Angolo in basso a destra - 4 CERCHI con intensità diverse
-           let bottomRightX = size.width - margin - (2 * smallShapeSize + spacing)
-           let bottomRightY = size.height - margin - (2 * smallShapeSize + spacing)
-           
-           // Cerchio in alto a sinistra (intensità 0% = bianco)
-           context.setFillColor(UIColor(white: 1.0, alpha: 1.0).cgColor)
-           context.fillEllipse(in: CGRect(x: bottomRightX, y: bottomRightY,
-                                         width: smallShapeSize, height: smallShapeSize))
-           
-           // Cerchio in alto a destra (intensità 25% = grigio chiaro)
-           context.setFillColor(UIColor(white: 0.75, alpha: 1.0).cgColor)
-           context.fillEllipse(in: CGRect(x: bottomRightX + smallShapeSize + spacing, y: bottomRightY,
-                                         width: smallShapeSize, height: smallShapeSize))
-           
-           // Cerchio in basso a sinistra (intensità 50% = grigio medio)
-           context.setFillColor(UIColor(white: 0.5, alpha: 1.0).cgColor)
-           context.fillEllipse(in: CGRect(x: bottomRightX, y: bottomRightY + smallShapeSize + spacing,
-                                         width: smallShapeSize, height: smallShapeSize))
-           
-           // Cerchio in basso a destra (intensità 100% = nero)
-           context.setFillColor(UIColor(white: 0.0, alpha: 1.0).cgColor)
-           context.fillEllipse(in: CGRect(x: bottomRightX + smallShapeSize + spacing,
-                                         y: bottomRightY + smallShapeSize + spacing,
-                                         width: smallShapeSize, height: smallShapeSize))
-       }
+        let fontSize: CGFloat = 50.0
+        
+        // Configura lo stile del testo
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .left
+        
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.boldSystemFont(ofSize: fontSize),
+            .foregroundColor: UIColor.black,
+            .paragraphStyle: paragraphStyle
+        ]
+        
+     
+        // Angolo in alto a destra
+        let topRight = "CamIO Explorer" as NSString
+        let topRightSize = topRight.size(withAttributes: attributes)
+        topRight.draw(at: CGPoint(x: size.width - margin - topRightSize.width, y: margin), withAttributes: attributes)
+        
+        // Angolo in basso a sinistra
+        let bottomLeft = "University of Milan" as NSString
+        let bottomLeftSize = bottomLeft.size(withAttributes: attributes)
+        bottomLeft.draw(at: CGPoint(x: margin, y: size.height - margin - bottomLeftSize.height), withAttributes: attributes)
+        
+        
+        // Angolo in alto a sinistra - 4 QUADRATI con intensità diverse
+        // Quadrato in alto a sinistra (intensità 0% = bianco)
+        context.setFillColor(UIColor(white: 0.0, alpha: 1.0).cgColor)
+        context.fill(CGRect(x: margin, y: margin, width: smallShapeSize, height: smallShapeSize))
+        
+        // Quadrato in alto a destra (intensità 25% = grigio chiaro)
+        context.setFillColor(UIColor(white: 0.50, alpha: 1.0).cgColor)
+        context.fill(CGRect(x: margin + smallShapeSize + spacing, y: margin,
+                           width: smallShapeSize, height: smallShapeSize))
+        
+        // Quadrato in basso a sinistra (intensità 50% = grigio medio)
+        context.setFillColor(UIColor(white: 0.8, alpha: 1.0).cgColor)
+        context.fill(CGRect(x: margin, y: margin + smallShapeSize + spacing,
+                           width: smallShapeSize, height: smallShapeSize))
+        
+        smallShapeSize = 40.0
+                   
+        // Angolo in basso a destra - 4 CERCHI con intensità diverse
+        let bottomRightX = size.width - margin - (2 * smallShapeSize + spacing)
+        let bottomRightY = size.height - margin - (2 * smallShapeSize + spacing)
+        
+        // Cerchio in alto a sinistra (intensità 0% = bianco)
+        context.setFillColor(UIColor(white: 1.0, alpha: 1.0).cgColor)
+        context.fillEllipse(in: CGRect(x: bottomRightX, y: bottomRightY,
+                                      width: smallShapeSize, height: smallShapeSize))
+        
+        // Cerchio in alto a destra (intensità 25% = grigio chiaro)
+        context.setFillColor(UIColor(white: 0.75, alpha: 1.0).cgColor)
+        context.fillEllipse(in: CGRect(x: bottomRightX + smallShapeSize + spacing, y: bottomRightY,
+                                      width: smallShapeSize, height: smallShapeSize))
+        
+        // Cerchio in basso a sinistra (intensità 50% = grigio medio)
+        context.setFillColor(UIColor(white: 0.5, alpha: 1.0).cgColor)
+        context.fillEllipse(in: CGRect(x: bottomRightX, y: bottomRightY + smallShapeSize + spacing,
+                                      width: smallShapeSize, height: smallShapeSize))
+        
+        // Cerchio in basso a destra (intensità 100% = nero)
+        context.setFillColor(UIColor(white: 0.0, alpha: 1.0).cgColor)
+        context.fillEllipse(in: CGRect(x: bottomRightX + smallShapeSize + spacing,
+                                      y: bottomRightY + smallShapeSize + spacing,
+                                      width: smallShapeSize, height: smallShapeSize))
+    }
     
 
     

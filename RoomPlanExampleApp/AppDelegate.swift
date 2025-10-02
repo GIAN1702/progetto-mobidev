@@ -1,30 +1,31 @@
-/*
-See the LICENSE.txt file for this sample’s licensing information.
-
-Abstract:
-The sample app's main entry point.
-*/
-
 import UIKit
 import RoomPlan
+import SwiftUI
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-
+    
+    var window: UIWindow?
+    
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        
+        // Crea la finestra
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        
+        // Verifica se RoomPlan è supportato
+        if RoomCaptureSession.isSupported {
+            // Mostra la UI principale
+            let contentView = ContentView()
+            window.rootViewController = UIHostingController(rootView: contentView)
+        } else {
+            // Mostra la schermata di dispositivo non supportato
+            let unsupportedView = UnsupportedDeviceView()
+            window.rootViewController = UIHostingController(rootView: unsupportedView)
+        }
+        
+        self.window = window
+        window.makeKeyAndVisible()
+        
         return true
     }
-
-    // MARK: UISceneSession life cycle
-
-    func application(_ application: UIApplication,
-                     configurationForConnecting connectingSceneSession: UISceneSession,
-                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        var configurationName = "Default Configuration"
-        if !RoomCaptureSession.isSupported {
-            configurationName = "Unsupported Device"
-        }
-        return UISceneConfiguration(name: configurationName, sessionRole: connectingSceneSession.role)
-    }
 }
-
