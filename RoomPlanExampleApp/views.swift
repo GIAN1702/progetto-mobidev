@@ -85,7 +85,9 @@ struct ObjectConfig: Identifiable, Equatable {
 
 // MARK: - ObjectSelectionViewModel
 class ObjectSelectionViewModel: ObservableObject {
-    @Published var objects: [ObjectConfig] = [
+    @Published var objects: [ObjectConfig] = []
+    
+    private let allObjectConfigs: [ObjectConfig] = [
         ObjectConfig(name: "Window", category: "Window", renderInTemplate: false, renderInColorMap: true),
         ObjectConfig(name: "Stairs", category: "Stairs", renderInTemplate: true, renderInColorMap: true),
         ObjectConfig(name: "Table", category: "Table", renderInTemplate: false, renderInColorMap: false),
@@ -105,6 +107,61 @@ class ObjectSelectionViewModel: ObservableObject {
         ObjectConfig(name: "Television", category: "TV", renderInTemplate: false, renderInColorMap: false),
         ObjectConfig(name: "Other Objects", category: "Object", renderInTemplate: false, renderInColorMap: false)
     ]
+    
+    func filterDetectedObjects(from capturedRoom: CapturedRoom) {
+        var detectedCategories = Set<String>()
+        
+        // Aggiungi sempre "Wall" perché ci sono sempre muri
+        detectedCategories.insert("Wall")
+        
+        // Controlla le finestre
+        if !capturedRoom.windows.isEmpty {
+            detectedCategories.insert("Window")
+        }
+        
+        // Controlla le porte
+        if !capturedRoom.doors.isEmpty {
+            detectedCategories.insert("Door")
+        }
+        
+        // Controlla tutti gli oggetti rilevati
+        for object in capturedRoom.objects {
+            let categoryName = getCategoryName(object.category)
+            detectedCategories.insert(categoryName)
+        }
+        
+        // Filtra la lista completa per includere solo le categorie rilevate
+        objects = allObjectConfigs.filter { config in
+            detectedCategories.contains(config.category)
+        }
+        
+        // Se nessun oggetto è stato rilevato (solo muri), mostra almeno i muri
+        if objects.isEmpty {
+            objects = allObjectConfigs.filter { $0.category == "Wall" }
+        }
+    }
+    
+    private func getCategoryName(_ category: CapturedRoom.Object.Category) -> String {
+        switch category {
+        case .storage: return "Storage"
+        case .refrigerator: return "Refrigetator"
+        case .stove: return "Stove"
+        case .bed: return "Bed"
+        case .sink: return "Sink"
+        case .washerDryer: return "Washmachine"
+        case .toilet: return "Toilet"
+        case .bathtub: return "Bathtub"
+        case .oven: return "Oven"
+        case .dishwasher: return "Dishwasher"
+        case .table: return "Table"
+        case .sofa: return "Sofa"
+        case .chair: return "Chair"
+        case .fireplace: return "Fireplace"
+        case .television: return "TV"
+        case .stairs: return "Stairs"
+        @unknown default: return "Object"
+        }
+    }
 }
 
 // MARK: - ObjectSelectionView (mostrata DOPO la scansione)
@@ -172,6 +229,10 @@ struct ObjectSelectionView: View {
                     capturedRoom: capturedRoom,
                     objectConfig: viewModel.objects
                 )
+            }
+            .onAppear {
+                // Filtra gli oggetti al primo caricamento della view
+                viewModel.filterDetectedObjects(from: capturedRoom)
             }
         }
     }
