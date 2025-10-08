@@ -9,17 +9,13 @@ import UIKit
 import RoomPlan
 import SceneKit
 import ZIPFoundation
+import SwiftUI
 
 let SPESSORE: CGFloat = 20.0
 let DIMENSIONE_CROCETTA: CGFloat = 60.0
 
 class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
     
-    // Configurazione degli oggetti da renderizzare
-    var objectConfig: [ObjectConfig] = []
-    
-    // Ora creiamo i bottoni programmaticamente invece di usare IBOutlet
-    private var exportButton: UIButton!
     private var doneButton: UIBarButtonItem!
     private var cancelButton: UIBarButtonItem!
     private var activityIndicator: UIActivityIndicatorView!
@@ -40,41 +36,19 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     private func setupUI() {
         view.backgroundColor = .systemBackground
         
-        // Setup navigation bar buttons
         cancelButton = UIBarButtonItem(title: "Cancel", style: .plain, target: self, action: #selector(cancelScanning))
         doneButton = UIBarButtonItem(title: "Done", style: .plain, target: self, action: #selector(doneScanning))
         
         navigationItem.leftBarButtonItem = cancelButton
         navigationItem.rightBarButtonItem = doneButton
         
-        // Setup export button
-        exportButton = UIButton(type: .system)
-        exportButton.setTitle("Export", for: .normal)
-        exportButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
-        exportButton.backgroundColor = .systemBlue
-        exportButton.setTitleColor(.white, for: .normal)
-        exportButton.layer.cornerRadius = 25
-        exportButton.translatesAutoresizingMaskIntoConstraints = false
-        exportButton.alpha = 0.0
-        exportButton.isHidden = true
-        exportButton.addTarget(self, action: #selector(exportResults), for: .touchUpInside)
-        
-        view.addSubview(exportButton)
-        
-        // Setup activity indicator
         activityIndicator = UIActivityIndicatorView(style: .medium)
         activityIndicator.translatesAutoresizingMaskIntoConstraints = false
         activityIndicator.hidesWhenStopped = true
         
         view.addSubview(activityIndicator)
         
-        // Constraints
         NSLayoutConstraint.activate([
-            exportButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            exportButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            exportButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 150),
-            exportButton.heightAnchor.constraint(equalToConstant: 50),
-            
             activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
@@ -107,7 +81,6 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     private func stopSession() {
         isScanning = false
         roomCaptureView?.captureSession.stop()
-        setCompleteNavBar()
     }
     
     func captureView(shouldPresent roomDataForProcessing: CapturedRoomData, error: Error?) -> Bool {
@@ -116,48 +89,67 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     
     func captureView(didPresent processedResult: CapturedRoom, error: Error?) {
         finalResults = processedResult
-        self.exportButton?.isEnabled = true
         self.activityIndicator?.stopAnimating()
+        
+        if !isScanning {
+            updateUIAfterScanComplete()
+        }
     }
     
     @objc func doneScanning() {
         if isScanning {
             stopSession()
+            activityIndicator?.startAnimating()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.activityIndicator?.stopAnimating()
+                self.updateUIAfterScanComplete()
+            }
         } else {
-            cancelScanning()
+            showObjectSelection()
         }
-        self.exportButton?.isEnabled = false
-        self.activityIndicator?.startAnimating()
     }
 
     @objc func cancelScanning() {
         dismiss(animated: true)
     }
-
-    @objc func exportResults() {
-        guard let results = finalResults else { return }
-        exportToCamIO(results)
+    
+    private func updateUIAfterScanComplete() {
+        doneButton?.title = "Continue"
+        
+        UIView.animate(withDuration: 0.5) {
+            self.cancelButton?.tintColor = .systemBlue
+            self.doneButton?.tintColor = .systemGreen
+        }
+    }
+    
+    private func showObjectSelection() {
+        guard let results = finalResults else {
+            let alert = UIAlertController(
+                title: "Error",
+                message: "No scan data available",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+            return
+        }
+        
+        let selectionView = ObjectSelectionView(capturedRoom: results)
+        let hostingController = UIHostingController(rootView: selectionView)
+        hostingController.modalPresentationStyle = .fullScreen
+        present(hostingController, animated: true)
     }
     
     private func setActiveNavBar() {
-        UIView.animate(withDuration: 1.0, animations: {
+        UIView.animate(withDuration: 1.0) {
             self.cancelButton?.tintColor = .white
             self.doneButton?.tintColor = .white
-            self.exportButton?.alpha = 0.0
-        }, completion: { complete in
-            self.exportButton?.isHidden = true
-        })
-    }
-    
-    private func setCompleteNavBar() {
-        self.exportButton?.isHidden = false
-        UIView.animate(withDuration: 1.0) {
-            self.cancelButton?.tintColor = .systemBlue
-            self.doneButton?.tintColor = .systemBlue
-            self.exportButton?.alpha = 1.0
         }
     }
 }
+
+// MARK: - CamIO Data Structures
 
 struct CamIOHotspot: Codable {
     let color: [Int]
@@ -176,49 +168,7 @@ struct CamIOData: Codable {
     let hotspots: [CamIOHotspot]
 }
 
-extension RoomCaptureViewController {
-    
-    func exportToCamIO(_ finalResults: CapturedRoom) {
-        
-        let converter = RoomPlanToCamIOConverter()
-        converter.objectConfig = self.objectConfig
-        
-        // Mostra indicatore di caricamento
-        let loadingAlert = UIAlertController(
-            title: "Export",
-            message: "Generating .camio file...",
-            preferredStyle: .alert
-        )
-        present(loadingAlert, animated: true)
-        
-        DispatchQueue.global(qos: .userInitiated).async {
-            if let camioURL = converter.convertToCamIO(from: finalResults) {
-                DispatchQueue.main.async {
-                    loadingAlert.dismiss(animated: true) {
-                        // Condividi il file
-                        let activityVC = UIActivityViewController(
-                            activityItems: [camioURL],
-                            applicationActivities: nil
-                        )
-                        self.present(activityVC, animated: true)
-                    }
-                }
-            } else {
-                DispatchQueue.main.async {
-                    loadingAlert.dismiss(animated: true) {
-                        let alert = UIAlertController(
-                            title: "Error",
-                            message: "Is not possible to generate the file",
-                            preferredStyle: .alert
-                        )
-                        alert.addAction(UIAlertAction(title: "OK", style: .default))
-                        self.present(alert, animated: true)
-                    }
-                }
-            }
-        }
-    }
-}
+// MARK: - RoomPlan to CamIO Converter
 
 class RoomPlanToCamIOConverter {
     
@@ -249,12 +199,11 @@ class RoomPlanToCamIOConverter {
     
     private var objectColorMap: [String: [Int]] = [:]
     private var occorrenze: [String: Int] = [:]
-
     private let renderSize: CGFloat = 2048
     
     private func shouldRender(_ category: String, inTemplate: Bool) -> Bool {
         guard let config = objectConfig.first(where: { $0.category == category }) else {
-            return true // Default: renderizza tutto se non c'è configurazione
+            return true
         }
         return inTemplate ? config.renderInTemplate : config.renderInColorMap
     }
@@ -271,7 +220,7 @@ class RoomPlanToCamIOConverter {
         return createCamIOFile(template: template, colorMap: colorMap, data: data)
     }
     
-    private func renderWithPriority(from result: CapturedRoom) -> (UIImage?, UIImage?) {
+    func renderWithPriority(from result: CapturedRoom) -> (UIImage?, UIImage?) {
         var minBounds = simd_float3(Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude)
         var maxBounds = simd_float3(-Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude)
         
@@ -303,7 +252,6 @@ class RoomPlanToCamIOConverter {
         var elementsToRender: [(priority: Int, render: [(CGContext) -> Void])] = []
         
         for (_, surface) in result.walls.enumerated() {
-            
             let priority = priorityMap["Wall"] ?? 1
             let color = getColor(surface.transform)
             if occorrenze["Wall"] == nil {
@@ -313,21 +261,14 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["Wall \(occorrenze["Wall"]!)"] = color
             
-            let renderInTemplate = true
-            let renderInColorMap = true
-            
             elementsToRender.append((priority: priority, render: [{
                 context in
-                if renderInColorMap {
-                    self.drawWall(surface, color: color, context: context,
-                                 sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-                }
+                self.drawWall(surface, color: color, context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
             },{
                 context in
-                if renderInTemplate {
-                    self.drawWall(surface, color: [255,255,255], context: context,
-                                 sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-                }
+                self.drawWall(surface, color: [255,255,255], context: context,
+                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
             }]))
         }
         
@@ -429,7 +370,6 @@ class RoomPlanToCamIOConverter {
             }]))
         }
         
- 
         elementsToRender.sort { $0.priority < $1.priority }
         
         for element in elementsToRender {
@@ -461,10 +401,8 @@ class RoomPlanToCamIOConverter {
         let margin: CGFloat = 30.0
         var smallShapeSize: CGFloat = 80.0
         let spacing: CGFloat = 5.0
-        
         let fontSize: CGFloat = 50.0
         
-        // Configura lo stile del testo
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .left
         
@@ -474,62 +412,47 @@ class RoomPlanToCamIOConverter {
             .paragraphStyle: paragraphStyle
         ]
         
-     
-        // Angolo in alto a destra
         let topRight = "CamIO Explorer" as NSString
         let topRightSize = topRight.size(withAttributes: attributes)
         topRight.draw(at: CGPoint(x: size.width - margin - topRightSize.width, y: margin), withAttributes: attributes)
         
-        // Angolo in basso a sinistra
         let bottomLeft = "University of Milan" as NSString
         let bottomLeftSize = bottomLeft.size(withAttributes: attributes)
         bottomLeft.draw(at: CGPoint(x: margin, y: size.height - margin - bottomLeftSize.height), withAttributes: attributes)
         
-        
-        // Angolo in alto a sinistra - 4 QUADRATI con intensità diverse
-        // Quadrato in alto a sinistra (intensità 0% = bianco)
         context.setFillColor(UIColor(white: 0.0, alpha: 1.0).cgColor)
         context.fill(CGRect(x: margin, y: margin, width: smallShapeSize, height: smallShapeSize))
         
-        // Quadrato in alto a destra (intensità 25% = grigio chiaro)
         context.setFillColor(UIColor(white: 0.50, alpha: 1.0).cgColor)
         context.fill(CGRect(x: margin + smallShapeSize + spacing, y: margin,
                            width: smallShapeSize, height: smallShapeSize))
         
-        // Quadrato in basso a sinistra (intensità 50% = grigio medio)
         context.setFillColor(UIColor(white: 0.8, alpha: 1.0).cgColor)
         context.fill(CGRect(x: margin, y: margin + smallShapeSize + spacing,
                            width: smallShapeSize, height: smallShapeSize))
         
         smallShapeSize = 40.0
                    
-        // Angolo in basso a destra - 4 CERCHI con intensità diverse
         let bottomRightX = size.width - margin - (2 * smallShapeSize + spacing)
         let bottomRightY = size.height - margin - (2 * smallShapeSize + spacing)
         
-        // Cerchio in alto a sinistra (intensità 0% = bianco)
         context.setFillColor(UIColor(white: 1.0, alpha: 1.0).cgColor)
         context.fillEllipse(in: CGRect(x: bottomRightX, y: bottomRightY,
                                       width: smallShapeSize, height: smallShapeSize))
         
-        // Cerchio in alto a destra (intensità 25% = grigio chiaro)
         context.setFillColor(UIColor(white: 0.75, alpha: 1.0).cgColor)
         context.fillEllipse(in: CGRect(x: bottomRightX + smallShapeSize + spacing, y: bottomRightY,
                                       width: smallShapeSize, height: smallShapeSize))
         
-        // Cerchio in basso a sinistra (intensità 50% = grigio medio)
         context.setFillColor(UIColor(white: 0.5, alpha: 1.0).cgColor)
         context.fillEllipse(in: CGRect(x: bottomRightX, y: bottomRightY + smallShapeSize + spacing,
                                       width: smallShapeSize, height: smallShapeSize))
         
-        // Cerchio in basso a destra (intensità 100% = nero)
         context.setFillColor(UIColor(white: 0.0, alpha: 1.0).cgColor)
         context.fillEllipse(in: CGRect(x: bottomRightX + smallShapeSize + spacing,
                                       y: bottomRightY + smallShapeSize + spacing,
                                       width: smallShapeSize, height: smallShapeSize))
     }
-    
-
     
     private func drawWall(_ wall: CapturedRoom.Surface, color: [Int], context: CGContext,
                           sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
@@ -546,7 +469,6 @@ class RoomPlanToCamIOConverter {
         context.saveGState()
         context.translateBy(x: x, y: z)
         context.rotate(by: CGFloat(rotation))
-        
         
         if (color == [255,255,255]){
             context.setStrokeColor(UIColor.black.cgColor)
@@ -626,7 +548,6 @@ class RoomPlanToCamIOConverter {
                                     alpha: 1.0).cgColor)
         context.fill(rect)
         
-        
         context.restoreGState()
     }
     
@@ -660,7 +581,6 @@ class RoomPlanToCamIOConverter {
         
         context.restoreGState()
     }
-    
     
     private func createCamIOData() -> CamIOData {
         var hotspots: [CamIOHotspot] = []
@@ -750,7 +670,7 @@ class RoomPlanToCamIOConverter {
         
         let luminance = 0.2126 * Float(r) + 0.7152 * Float(g) + 0.0722 * Float(b)
         
-        let targetLuminance = Float(Int(luminance) % 126 + 25) // 25-150
+        let targetLuminance = Float(Int(luminance) % 126 + 25)
         let scale = targetLuminance / luminance
         
         let finalR = max(0, min(255, Int(Float(r) * scale)))

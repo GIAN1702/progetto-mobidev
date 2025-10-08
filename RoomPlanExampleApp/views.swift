@@ -2,15 +2,13 @@
 //  views.swift
 //  ROOM CamIO
 //
-//  Created by Students on 08/10/25.
-//  Copyright © 2025 Apple. All rights reserved.
-//
 
 import SwiftUI
+import RoomPlan
 
 // MARK: - ContentView (Schermata principale)
 struct ContentView: View {
-    @State private var showingObjectSelection = false
+    @State private var showingScanView = false
     
     var body: some View {
         NavigationView {
@@ -23,7 +21,7 @@ struct ContentView: View {
                 Text("""
                 To scan your room, point your device at all the walls, windows, doors and furniture in your space until your scan is complete.
                 
-                then click export for the camio compatible project
+                After scanning, you can configure what to render and preview before exporting.
                 """)
                 .font(.body)
                 .multilineTextAlignment(.center)
@@ -32,9 +30,9 @@ struct ContentView: View {
                 Spacer()
                 
                 Button(action: {
-                    showingObjectSelection = true
+                    showingScanView = true
                 }) {
-                    Text("Configure & Scan")
+                    Text("Start Scanning")
                         .font(.headline)
                         .foregroundColor(.white)
                         .frame(minWidth: 200)
@@ -44,8 +42,8 @@ struct ContentView: View {
                 }
                 .padding(.bottom, 33)
             }
-            .fullScreenCover(isPresented: $showingObjectSelection) {
-                ObjectSelectionView()
+            .fullScreenCover(isPresented: $showingScanView) {
+                RoomCaptureViewWrapper()
             }
         }
     }
@@ -99,7 +97,6 @@ class ObjectSelectionViewModel: ObservableObject {
         ObjectConfig(name: "Bed", category: "Bed", renderInTemplate: false, renderInColorMap: false),
         ObjectConfig(name: "Sink", category: "Sink", renderInTemplate: false, renderInColorMap: false),
         ObjectConfig(name: "Washer/Dryer", category: "Washmachine", renderInTemplate: false, renderInColorMap: false),
-       
         ObjectConfig(name: "Bathtub", category: "Bathtub", renderInTemplate: false, renderInColorMap: false),
         ObjectConfig(name: "Oven", category: "Oven", renderInTemplate: false, renderInColorMap: false),
         ObjectConfig(name: "Dishwasher", category: "Dishwasher", renderInTemplate: false, renderInColorMap: false),
@@ -108,16 +105,13 @@ class ObjectSelectionViewModel: ObservableObject {
         ObjectConfig(name: "Television", category: "TV", renderInTemplate: false, renderInColorMap: false),
         ObjectConfig(name: "Other Objects", category: "Object", renderInTemplate: false, renderInColorMap: false)
     ]
-    
-    func getConfig(for category: String) -> ObjectConfig? {
-        return objects.first { $0.category == category }
-    }
 }
 
-// MARK: - ObjectSelectionView
+// MARK: - ObjectSelectionView (mostrata DOPO la scansione)
 struct ObjectSelectionView: View {
     @StateObject private var viewModel = ObjectSelectionViewModel()
-    @State private var showingScanView = false
+    @State private var showingPreview = false
+    let capturedRoom: CapturedRoom
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
@@ -141,9 +135,7 @@ struct ObjectSelectionView: View {
                     }
                 ) {
                     ForEach(viewModel.objects.indices, id: \.self) { index in
-                        ObjectRow(
-                            object: $viewModel.objects[index]
-                        )
+                        ObjectRow(object: $viewModel.objects[index])
                     }
                 }
                 
@@ -151,9 +143,9 @@ struct ObjectSelectionView: View {
                     HStack {
                         Spacer()
                         Button(action: {
-                            showingScanView = true
+                            showingPreview = true
                         }) {
-                            Text("Start Scanning")
+                            Text("Preview & Export")
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -166,17 +158,20 @@ struct ObjectSelectionView: View {
                     .listRowBackground(Color.clear)
                 }
             }
-            .navigationTitle("Object Selection")
+            .navigationTitle("Select Objects")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Back") {
+                    Button("Cancel") {
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
             }
-            .fullScreenCover(isPresented: $showingScanView) {
-                RoomCaptureViewWrapper(objectConfig: viewModel.objects)
+            .fullScreenCover(isPresented: $showingPreview) {
+                TemplatePreviewView(
+                    capturedRoom: capturedRoom,
+                    objectConfig: viewModel.objects
+                )
             }
         }
     }
@@ -188,26 +183,22 @@ struct ObjectRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Nome oggetto
             Text(object.name)
                 .font(.body)
                 .frame(maxWidth: .infinity, alignment: .leading)
             
-            // Toggle per template
             Toggle("", isOn: $object.renderInTemplate)
                 .labelsHidden()
                 .toggleStyle(SwitchToggleStyle(tint: .blue))
                 .frame(width: 80)
                 .onChange(of: object.renderInTemplate) { newValue in
-                    // Se disattivo il template, attivo automaticamente la colorMap
                     if !newValue {
                        object.renderInColorMap = false
-                    }else{
+                    } else {
                         object.renderInColorMap = true
                     }
                 }
             
-            // Checkbox per colorMap (visibile solo se template è OFF)
             if !object.renderInTemplate {
                 Button(action: {
                     object.renderInColorMap.toggle()
@@ -218,7 +209,6 @@ struct ObjectRow: View {
                 }
                 .frame(width: 50)
             } else {
-                // Spazio vuoto per allineamento
                 Color.clear.frame(width: 50)
             }
         }
@@ -226,20 +216,140 @@ struct ObjectRow: View {
     }
 }
 
-// MARK: - RoomCaptureViewWrapper
-struct RoomCaptureViewWrapper: UIViewControllerRepresentable {
+// MARK: - TemplatePreviewView (NUOVA - mostra l'anteprima prima di esportare)
+struct TemplatePreviewView: View {
+    let capturedRoom: CapturedRoom
     let objectConfig: [ObjectConfig]
     
+    @State private var templateImage: UIImage?
+    @State private var isGenerating = true
+    @State private var showingExportSheet = false
+    @State private var camioFileURL: URL?
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.white.edgesIgnoringSafeArea(.all)
+                
+                if isGenerating {
+                    VStack(spacing: 20) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                            .scaleEffect(1.5)
+                        Text("Generating preview...")
+                            .foregroundColor(.gray)
+                    }
+                } else if let image = templateImage {
+                    VStack(spacing: 0) {
+                        // Immagine a larghezza schermo
+                        GeometryReader { geometry in
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: geometry.size.width)
+                        }
+                        
+                        // Bottone Export sotto
+                        VStack(spacing: 20) {
+                            Button(action: {
+                                exportToCamIO()
+                            }) {
+                                Text("Export")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: 200)
+                                    .padding()
+                                    .background(Color.blue)
+                                    .cornerRadius(25)
+                            }
+                            .disabled(isGenerating)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .background(Color.white)
+                    }
+                } else {
+                    Text("Error generating preview")
+                        .foregroundColor(.red)
+                }
+            }
+            .navigationTitle("Template Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Back") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            generatePreview()
+        }
+        .sheet(isPresented: $showingExportSheet) {
+            if let url = camioFileURL {
+                ShareSheet(activityItems: [url])
+            }
+        }
+    }
+    
+    private func generatePreview() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let converter = RoomPlanToCamIOConverter()
+            converter.objectConfig = objectConfig
+            
+            let (template, _) = converter.renderWithPriority(from: capturedRoom)
+            
+            DispatchQueue.main.async {
+                self.templateImage = template
+                self.isGenerating = false
+            }
+        }
+    }
+    
+    private func exportToCamIO() {
+        isGenerating = true
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let converter = RoomPlanToCamIOConverter()
+            converter.objectConfig = objectConfig
+            
+            if let url = converter.convertToCamIO(from: capturedRoom) {
+                DispatchQueue.main.async {
+                    self.camioFileURL = url
+                    self.isGenerating = false
+                    self.showingExportSheet = true
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.isGenerating = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - ShareSheet
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - RoomCaptureViewWrapper (modificato per non passare objectConfig)
+struct RoomCaptureViewWrapper: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UINavigationController {
         let viewController = RoomCaptureViewController()
-        viewController.objectConfig = objectConfig
         let navigationController = UINavigationController(rootViewController: viewController)
         return navigationController
     }
     
-    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
-        // Non serve aggiornare nulla
-    }
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {}
 }
 
 // MARK: - Preview
