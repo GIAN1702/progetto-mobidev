@@ -15,6 +15,9 @@ let DIMENSIONE_CROCETTA: CGFloat = 60.0
 
 class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
     
+    // Configurazione degli oggetti da renderizzare
+    var objectConfig: [ObjectConfig] = []
+    
     // Ora creiamo i bottoni programmaticamente invece di usare IBOutlet
     private var exportButton: UIButton!
     private var doneButton: UIBarButtonItem!
@@ -178,6 +181,7 @@ extension RoomCaptureViewController {
     func exportToCamIO(_ finalResults: CapturedRoom) {
         
         let converter = RoomPlanToCamIOConverter()
+        converter.objectConfig = self.objectConfig
         
         // Mostra indicatore di caricamento
         let loadingAlert = UIAlertController(
@@ -218,6 +222,8 @@ extension RoomCaptureViewController {
 
 class RoomPlanToCamIOConverter {
     
+    var objectConfig: [ObjectConfig] = []
+    
     private let priorityMap: [String: Int] = [
         "Wall": 51,
         "Stairs": 10,
@@ -245,6 +251,13 @@ class RoomPlanToCamIOConverter {
     private var occorrenze: [String: Int] = [:]
 
     private let renderSize: CGFloat = 2048
+    
+    private func shouldRender(_ category: String, inTemplate: Bool) -> Bool {
+        guard let config = objectConfig.first(where: { $0.category == category }) else {
+            return true // Default: renderizza tutto se non c'è configurazione
+        }
+        return inTemplate ? config.renderInTemplate : config.renderInColorMap
+    }
     
     func convertToCamIO(from result: CapturedRoom) -> URL? {
         let (templateImage, colorMapImage) = renderWithPriority(from: result)
@@ -290,6 +303,7 @@ class RoomPlanToCamIOConverter {
         var elementsToRender: [(priority: Int, render: [(CGContext) -> Void])] = []
         
         for (_, surface) in result.walls.enumerated() {
+            
             let priority = priorityMap["Wall"] ?? 1
             let color = getColor(surface.transform)
             if occorrenze["Wall"] == nil {
@@ -299,15 +313,29 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["Wall \(occorrenze["Wall"]!)"] = color
             
+            let renderInTemplate = true
+            let renderInColorMap = true
+            
             elementsToRender.append((priority: priority, render: [{
-               context in self.drawWall(surface, color: color, context: context,
-                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-            },{context in self.drawWall(surface, color: [255,255,255], context: context,
-                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                context in
+                if renderInColorMap {
+                    self.drawWall(surface, color: color, context: context,
+                                 sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                }
+            },{
+                context in
+                if renderInTemplate {
+                    self.drawWall(surface, color: [255,255,255], context: context,
+                                 sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                }
             }]))
         }
         
         for (_, window) in result.windows.enumerated() {
+            if !shouldRender("Window", inTemplate: true) && !shouldRender("Window", inTemplate: false) {
+                continue
+            }
+            
             let priority = priorityMap["Window"] ?? 50
             let color = getColor(window.transform)
             if occorrenze["Window"] == nil {
@@ -317,15 +345,29 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["Window \(occorrenze["Window"]!)"] = color
             
+            let renderInTemplate = shouldRender("Window", inTemplate: true)
+            let renderInColorMap = shouldRender("Window", inTemplate: false)
+            
             elementsToRender.append((priority: priority, render: [{
-                context in self.drawWindow(window, color: color, context: context,
-                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-            },{context in self.drawWindow(window, color: [255,255,255], context: context,
-                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                context in
+                if renderInColorMap {
+                    self.drawWindow(window, color: color, context: context,
+                                   sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                }
+            },{
+                context in
+                if renderInTemplate {
+                    self.drawWindow(window, color: [255,255,255], context: context,
+                                   sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                }
             }]))
         }
         
         for (_, door) in result.doors.enumerated() {
+            if !shouldRender("Door", inTemplate: true) && !shouldRender("Door", inTemplate: false) {
+                continue
+            }
+            
             let priority = priorityMap["Door"] ?? 50
             let color = getColor(door.transform)
             if occorrenze["Door"] == nil {
@@ -335,16 +377,31 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["Door \(occorrenze["Door"]!)"] = color
             
+            let renderInTemplate = shouldRender("Door", inTemplate: true)
+            let renderInColorMap = shouldRender("Door", inTemplate: false)
+            
             elementsToRender.append((priority: priority, render: [{
-               context in self.drawDoor(door, color: color, context: context,
-                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-            },{context in self.drawDoor(door, color: [255,255,255], context: context,
-                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                context in
+                if renderInColorMap {
+                    self.drawDoor(door, color: color, context: context,
+                                 sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                }
+            },{
+                context in
+                if renderInTemplate {
+                    self.drawDoor(door, color: [255,255,255], context: context,
+                                 sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                }
             }]))
         }
         
         for object in result.objects {
             let categoryName = getCategoryName(object.category)
+            
+            if !shouldRender(categoryName, inTemplate: true) && !shouldRender(categoryName, inTemplate: false) {
+                continue
+            }
+            
             let priority = priorityMap[categoryName] ?? 32
             let color = getColor(object.transform)
             if occorrenze[categoryName] == nil {
@@ -354,11 +411,21 @@ class RoomPlanToCamIOConverter {
             }
             objectColorMap["\(categoryName) \(occorrenze[categoryName]!)"] = color
             
+            let renderInTemplate = shouldRender(categoryName, inTemplate: true)
+            let renderInColorMap = shouldRender(categoryName, inTemplate: false)
+            
             elementsToRender.append((priority: priority, render: [{
-                context in self.drawObject(object, color: color, context: context,
-                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
-            },{context in self.drawObject(object, color: [255,255,255], context: context,
-                             sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                context in
+                if renderInColorMap {
+                    self.drawObject(object, color: color, context: context,
+                                   sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                }
+            },{
+                context in
+                if renderInTemplate {
+                    self.drawObject(object, color: [255,255,255], context: context,
+                                   sceneCenter: sceneCenter, maxDimension: maxDimension, size: size)
+                }
             }]))
         }
         
@@ -514,15 +581,18 @@ class RoomPlanToCamIOConverter {
         context.translateBy(x: x, y: z)
         context.rotate(by: CGFloat(rotation))
         
+        let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
 
         if (color == [255,255,255]){
             context.setStrokeColor(UIColor.black.cgColor)
             context.setLineWidth(SPESSORE)
-            context.move(to: CGPoint(x: -width/2, y: 0))
-            context.addLine(to: CGPoint(x: width/2, y: 0))
-            context.strokePath()
+            context.stroke(rect)
+            context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
+                                        green: CGFloat(color[1])/255.0,
+                                        blue: CGFloat(color[2])/255.0,
+                                        alpha: 1.0).cgColor)
+            context.fill(rect)
         }else{
-            let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
             context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
                                         green: CGFloat(color[1])/255.0,
                                         blue: CGFloat(color[2])/255.0,
