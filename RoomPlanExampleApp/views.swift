@@ -111,31 +111,25 @@ class ObjectSelectionViewModel: ObservableObject {
     func filterDetectedObjects(from capturedRoom: CapturedRoom) {
         var detectedCategories = Set<String>()
         
-        // Aggiungi sempre "Wall" perché ci sono sempre muri
         detectedCategories.insert("Wall")
         
-        // Controlla le finestre
         if !capturedRoom.windows.isEmpty {
             detectedCategories.insert("Window")
         }
         
-        // Controlla le porte
         if !capturedRoom.doors.isEmpty {
             detectedCategories.insert("Door")
         }
         
-        // Controlla tutti gli oggetti rilevati
         for object in capturedRoom.objects {
             let categoryName = getCategoryName(object.category)
             detectedCategories.insert(categoryName)
         }
         
-        // Filtra la lista completa per includere solo le categorie rilevate
         objects = allObjectConfigs.filter { config in
             detectedCategories.contains(config.category)
         }
         
-        // Se nessun oggetto è stato rilevato (solo muri), mostra almeno i muri
         if objects.isEmpty {
             objects = allObjectConfigs.filter { $0.category == "Wall" }
         }
@@ -162,9 +156,13 @@ class ObjectSelectionViewModel: ObservableObject {
         @unknown default: return "Object"
         }
     }
+    
+    func moveObject(from source: IndexSet, to destination: Int) {
+        objects.move(fromOffsets: source, toOffset: destination)
+    }
 }
 
-// MARK: - ObjectSelectionView (mostrata DOPO la scansione)
+// MARK: - ObjectSelectionView
 struct ObjectSelectionView: View {
     @StateObject private var viewModel = ObjectSelectionViewModel()
     @State private var showingPreview = false
@@ -175,25 +173,36 @@ struct ObjectSelectionView: View {
         NavigationView {
             List {
                 Section(header:
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Configure Objects to Render")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Configure Rendering Priority")
                             .font(.headline)
+                        Text("Drag objects to reorder • Higher = more priority")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         HStack {
                             Spacer()
                             Text("Map")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                                .frame(width: 80)
+                                .frame(width: 120)
                             Text("CamIO")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                                .frame(width: 50)
+                                .frame(width: 90)
+                            Text("Priority")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .frame(width: 70)
                         }
                     }
                 ) {
                     ForEach(viewModel.objects.indices, id: \.self) { index in
-                        ObjectRow(object: $viewModel.objects[index])
+                        ObjectRow(
+                            object: $viewModel.objects[index],
+                            priority: viewModel.objects.count - index
+                        )
                     }
+                    .onMove(perform: viewModel.moveObject)
                 }
                 
                 Section {
@@ -217,6 +226,7 @@ struct ObjectSelectionView: View {
             }
             .navigationTitle("Select Objects")
             .navigationBarTitleDisplayMode(.large)
+            .environment(\.editMode, .constant(.active))
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
@@ -231,7 +241,6 @@ struct ObjectSelectionView: View {
                 )
             }
             .onAppear {
-                // Filtra gli oggetti al primo caricamento della view
                 viewModel.filterDetectedObjects(from: capturedRoom)
             }
         }
@@ -241,6 +250,7 @@ struct ObjectSelectionView: View {
 // MARK: - ObjectRow
 struct ObjectRow: View {
     @Binding var object: ObjectConfig
+    let priority: Int
     
     var body: some View {
         HStack(spacing: 12) {
@@ -251,7 +261,7 @@ struct ObjectRow: View {
             Toggle("", isOn: $object.renderInTemplate)
                 .labelsHidden()
                 .toggleStyle(SwitchToggleStyle(tint: .blue))
-                .frame(width: 80)
+                .frame(width: 120)
                 .onChange(of: object.renderInTemplate) { newValue in
                     if !newValue {
                        object.renderInColorMap = false
@@ -268,16 +278,16 @@ struct ObjectRow: View {
                         .foregroundColor(object.renderInColorMap ? .blue : .gray)
                         .font(.title2)
                 }
-                .frame(width: 50)
+                .frame(width: 90, alignment: .leading)
             } else {
-                Color.clear.frame(width: 50)
+                Color.clear.frame(width: 90)
             }
         }
         .padding(.vertical, 4)
     }
 }
 
-// MARK: - TemplatePreviewView (NUOVA - mostra l'anteprima prima di esportare)
+// MARK: - TemplatePreviewView
 struct TemplatePreviewView: View {
     let capturedRoom: CapturedRoom
     let objectConfig: [ObjectConfig]
@@ -303,7 +313,6 @@ struct TemplatePreviewView: View {
                     }
                 } else if let image = templateImage {
                     VStack(spacing: 0) {
-                        // Immagine a larghezza schermo
                         GeometryReader { geometry in
                             Image(uiImage: image)
                                 .resizable()
@@ -311,7 +320,6 @@ struct TemplatePreviewView: View {
                                 .frame(width: geometry.size.width)
                         }
                         
-                        // Bottone Export sotto
                         VStack(spacing: 20) {
                             Button(action: {
                                 exportToCamIO()
@@ -402,7 +410,7 @@ struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-// MARK: - RoomCaptureViewWrapper (modificato per non passare objectConfig)
+// MARK: - RoomCaptureViewWrapper
 struct RoomCaptureViewWrapper: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UINavigationController {
         let viewController = RoomCaptureViewController()

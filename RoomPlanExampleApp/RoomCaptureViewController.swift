@@ -174,29 +174,6 @@ class RoomPlanToCamIOConverter {
     
     var objectConfig: [ObjectConfig] = []
     
-    private let priorityMap: [String: Int] = [
-        "Wall": 51,
-        "Stairs": 10,
-        "Storage": 20,
-        "Fireplace": 21,
-        "Chair": 30,
-        "Sofa": 30,
-        "Bed": 30,
-        "Table": 31,
-        "TV": 32,
-        "Object": 32,
-        "Bathtub": 39,
-        "Refrigetator": 40,
-        "Stove": 40,
-        "Oven": 40,
-        "Dishwasher": 40,
-        "Washmachine": 40,
-        "Door": 53,
-        "Window": 52,
-        "Sink": 50,
-        "Toilet": 50
-    ]
-    
     private var objectColorMap: [String: [Int]] = [:]
     private var occorrenze: [String: Int] = [:]
     private let renderSize: CGFloat = 2048
@@ -251,8 +228,21 @@ class RoomPlanToCamIOConverter {
         
         var elementsToRender: [(priority: Int, render: [(CGContext) -> Void])] = []
         
+        // Crea una mappa delle priorità basata sull'ordine in objectConfig
+        var categoryPriorityMap: [String: Int] = [:]
+        let totalObjects = objectConfig.count
+        for (index, config) in objectConfig.enumerated() {
+            // Gli oggetti all'inizio dell'array hanno priorità più alta
+            categoryPriorityMap[config.category] = totalObjects - index
+        }
+        
+        // Funzione helper per ottenere la priorità
+        func getPriority(for category: String) -> Int {
+            return categoryPriorityMap[category] ?? 0
+        }
+        
         for (_, surface) in result.walls.enumerated() {
-            let priority = priorityMap["Wall"] ?? 1
+            let priority = getPriority(for: "Wall")
             let color = getColor(surface.transform)
             if occorrenze["Wall"] == nil {
                 occorrenze["Wall"] = 1
@@ -277,7 +267,7 @@ class RoomPlanToCamIOConverter {
                 continue
             }
             
-            let priority = priorityMap["Window"] ?? 50
+            let priority = getPriority(for: "Window")
             let color = getColor(window.transform)
             if occorrenze["Window"] == nil {
                 occorrenze["Window"] = 1
@@ -309,7 +299,7 @@ class RoomPlanToCamIOConverter {
                 continue
             }
             
-            let priority = priorityMap["Door"] ?? 50
+            let priority = getPriority(for: "Door")
             let color = getColor(door.transform)
             if occorrenze["Door"] == nil {
                 occorrenze["Door"] = 1
@@ -343,7 +333,7 @@ class RoomPlanToCamIOConverter {
                 continue
             }
             
-            let priority = priorityMap[categoryName] ?? 32
+            let priority = getPriority(for: categoryName)
             let color = getColor(object.transform)
             if occorrenze[categoryName] == nil {
                 occorrenze[categoryName] = 1
@@ -370,6 +360,7 @@ class RoomPlanToCamIOConverter {
             }]))
         }
         
+        // Ordina per priorità (dal più basso al più alto, così gli elementi con priorità alta vengono disegnati dopo)
         elementsToRender.sort { $0.priority < $1.priority }
         
         for element in elementsToRender {
