@@ -180,11 +180,11 @@ struct ObjectSelectionView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         HStack {
-                            Spacer()
+                            Spacer(minLength: 140)
                             Text("Map")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                                .frame(width: 120)
+                                .frame(width: 65)
                             Text("CamIO")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -261,7 +261,7 @@ struct ObjectRow: View {
             Toggle("", isOn: $object.renderInTemplate)
                 .labelsHidden()
                 .toggleStyle(SwitchToggleStyle(tint: .blue))
-                .frame(width: 120)
+                .frame(width: 100)
                 .onChange(of: object.renderInTemplate) { newValue in
                     if !newValue {
                        object.renderInColorMap = false
