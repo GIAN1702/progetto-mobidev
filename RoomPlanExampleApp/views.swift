@@ -196,10 +196,10 @@ struct ObjectSelectionView: View {
                         }
                     }
                 ) {
-                    ForEach(viewModel.objects.indices, id: \.self) { index in
+                    ForEach(viewModel.objects) { object in
                         ObjectRow(
-                            object: $viewModel.objects[index],
-                            priority: viewModel.objects.count - index
+                            object: binding(for: object),
+                            priority: getPriority(for: object)
                         )
                     }
                     .onMove(perform: viewModel.moveObject)
@@ -244,6 +244,22 @@ struct ObjectSelectionView: View {
                 viewModel.filterDetectedObjects(from: capturedRoom)
             }
         }
+    }
+    
+    // Funzione helper per ottenere il binding corretto usando l'ID
+    private func binding(for object: ObjectConfig) -> Binding<ObjectConfig> {
+        guard let index = viewModel.objects.firstIndex(where: { $0.id == object.id }) else {
+            fatalError("Object not found")
+        }
+        return $viewModel.objects[index]
+    }
+    
+    // Funzione helper per calcolare la priorità
+    private func getPriority(for object: ObjectConfig) -> Int {
+        guard let index = viewModel.objects.firstIndex(where: { $0.id == object.id }) else {
+            return 0
+        }
+        return viewModel.objects.count - index
     }
 }
 
