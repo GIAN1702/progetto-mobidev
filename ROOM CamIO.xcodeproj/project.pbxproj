@@ -12,6 +12,7 @@
 		ACEF94BA2820AD2400776A9D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ACEF94B92820AD2400776A9D /* Assets.xcassets */; };
 		AE0361732E5A07E9005C8F18 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = AE0361722E5A07E9005C8F18 /* ZIPFoundation */; };
 		AFB26E4C2E96562A005613C8 /* views.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFB26E4B2E965615005613C8 /* views.swift */; };
+		AFBD655C2E9EB2C00044F1EB /*  RoomPlanToCamIOConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBD655B2E9EB2B20044F1EB /*  RoomPlanToCamIOConverter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +24,7 @@
 		ACEF94B92820AD2400776A9D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		ACEF94BE2820AD2400776A9D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AFB26E4B2E965615005613C8 /* views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = views.swift; sourceTree = "<group>"; };
+		AFBD655B2E9EB2B20044F1EB /*  RoomPlanToCamIOConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = " RoomPlanToCamIOConverter.swift"; sourceTree = "<group>"; };
 		CD4891E2C9F3F7012DE25B49 /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -68,6 +70,7 @@
 		ACEF94AF2820AD2300776A9D /* RoomPlanExampleApp */ = {
 			isa = PBXGroup;
 			children = (
+				AFBD655B2E9EB2B20044F1EB /*  RoomPlanToCamIOConverter.swift */,
 				AFB26E4B2E965615005613C8 /* views.swift */,
 				ACEF94B02820AD2300776A9D /* AppDelegate.swift */,
 				ACEF94B42820AD2300776A9D /* RoomCaptureViewController.swift */,
@@ -161,6 +164,7 @@
 			files = (
 				ACEF94B52820AD2300776A9D /* RoomCaptureViewController.swift in Sources */,
 				ACEF94B12820AD2300776A9D /* AppDelegate.swift in Sources */,
+				AFBD655C2E9EB2C00044F1EB /*  RoomPlanToCamIOConverter.swift in Sources */,
 				AFB26E4C2E96562A005613C8 /* views.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

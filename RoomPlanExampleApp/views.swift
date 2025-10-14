@@ -165,7 +165,7 @@ class ObjectSelectionViewModel: ObservableObject {
 // MARK: - ObjectSelectionView
 struct ObjectSelectionView: View {
     @StateObject private var viewModel = ObjectSelectionViewModel()
-    @State private var showingPreview = false
+    @State private var showingRotation = false
     let capturedRoom: CapturedRoom
     @Environment(\.presentationMode) var presentationMode
     
@@ -209,9 +209,9 @@ struct ObjectSelectionView: View {
                     HStack {
                         Spacer()
                         Button(action: {
-                            showingPreview = true
+                            showingRotation = true
                         }) {
-                            Text("Preview & Export")
+                            Text("Continue")
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -234,8 +234,8 @@ struct ObjectSelectionView: View {
                     }
                 }
             }
-            .fullScreenCover(isPresented: $showingPreview) {
-                TemplatePreviewView(
+            .fullScreenCover(isPresented: $showingRotation) {
+                RotationSelectionView(
                     capturedRoom: capturedRoom,
                     objectConfig: viewModel.objects
                 )
@@ -246,7 +246,6 @@ struct ObjectSelectionView: View {
         }
     }
     
-    // Funzione helper per ottenere il binding corretto usando l'ID
     private func binding(for object: ObjectConfig) -> Binding<ObjectConfig> {
         guard let index = viewModel.objects.firstIndex(where: { $0.id == object.id }) else {
             fatalError("Object not found")
@@ -254,7 +253,6 @@ struct ObjectSelectionView: View {
         return $viewModel.objects[index]
     }
     
-    // Funzione helper per calcolare la priorità
     private func getPriority(for object: ObjectConfig) -> Int {
         guard let index = viewModel.objects.firstIndex(where: { $0.id == object.id }) else {
             return 0
@@ -303,10 +301,139 @@ struct ObjectRow: View {
     }
 }
 
-// MARK: - TemplatePreviewView
+// MARK: - RotationSelectionView (NEW)
+struct RotationSelectionView: View {
+    let capturedRoom: CapturedRoom
+    let objectConfig: [ObjectConfig]
+    
+    @State private var rotationAngle: Double = 0
+    @State private var previewImage: UIImage?
+    @State private var isGenerating = true
+    @State private var showingFinalPreview = false
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.white.edgesIgnoringSafeArea(.all)
+                
+                if isGenerating {
+                    VStack(spacing: 20) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                            .scaleEffect(1.5)
+                        Text("Generating preview...")
+                            .foregroundColor(.gray)
+                    }
+                } else if let image = previewImage {
+                    VStack(spacing: 0) {
+                        GeometryReader { geometry in
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: geometry.size.width)
+                                .rotationEffect(.degrees(rotationAngle))
+                        }
+                        
+                        VStack(spacing: 30) {
+                            VStack(spacing: 10) {
+                                Text("Rotation: \(Int(rotationAngle))°")
+                                    .font(.headline)
+                                
+                                Slider(value: $rotationAngle, in: -180...180, step: 1)
+                                    .accentColor(.blue)
+                                    .padding(.horizontal, 40)
+                                
+                                HStack(spacing: 20) {
+                                    Button(action: { rotationAngle = 0 }) {
+                                        Text("Reset")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                    
+                                    Button(action: { rotationAngle = 90 }) {
+                                        Text("90°")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                    
+                                    Button(action: { rotationAngle = -90 }) {
+                                        Text("-90°")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                    
+                                    Button(action: { rotationAngle = 180 }) {
+                                        Text("180°")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                            }
+                            
+                            Button(action: {
+                                showingFinalPreview = true
+                            }) {
+                                Text("Apply Rotation")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: 200)
+                                    .padding()
+                                    .background(Color.blue)
+                                    .cornerRadius(25)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 30)
+                        .background(Color.white)
+                    }
+                } else {
+                    Text("Error generating preview")
+                        .foregroundColor(.red)
+                }
+            }
+            .navigationTitle("Adjust Rotation")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Back") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            generateRotationPreview()
+        }
+        .fullScreenCover(isPresented: $showingFinalPreview) {
+            TemplatePreviewView(
+                capturedRoom: capturedRoom,
+                objectConfig: objectConfig,
+                rotation: rotationAngle
+            )
+        }
+    }
+    
+    private func generateRotationPreview() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let converter = RoomPlanToCamIOConverter()
+            converter.objectConfig = objectConfig
+            
+            let (template, _) = converter.renderForRotationPreview(from: capturedRoom)
+            
+            DispatchQueue.main.async {
+                self.previewImage = template
+                self.isGenerating = false
+            }
+        }
+    }
+}
+
+// MARK: - TemplatePreviewView (UPDATED)
 struct TemplatePreviewView: View {
     let capturedRoom: CapturedRoom
     let objectConfig: [ObjectConfig]
+    var rotation: Double = 0
     
     @State private var templateImage: UIImage?
     @State private var isGenerating = true
@@ -383,6 +510,7 @@ struct TemplatePreviewView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let converter = RoomPlanToCamIOConverter()
             converter.objectConfig = objectConfig
+            converter.rotation = rotation
             
             let (template, _) = converter.renderWithPriority(from: capturedRoom)
             
@@ -399,6 +527,7 @@ struct TemplatePreviewView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let converter = RoomPlanToCamIOConverter()
             converter.objectConfig = objectConfig
+            converter.rotation = rotation
             
             if let url = converter.convertToCamIO(from: capturedRoom) {
                 DispatchQueue.main.async {
