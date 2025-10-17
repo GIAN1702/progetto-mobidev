@@ -412,17 +412,29 @@ class RoomPlanToCamIOConverter {
                           sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
         let position = simd_float3(wall.transform.columns.3.x, wall.transform.columns.3.y, wall.transform.columns.3.z)
         
-        let x = CGFloat((position.x - sceneCenter.x) / maxDimension + 0.5) * size.width
-        let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
+        // Calcola posizione relativa al centro della scena
+        let relX = position.x - sceneCenter.x
+        let relZ = position.z - sceneCenter.z
+        
+        // Applica rotazione globale alle coordinate relative
+        let globalRotRad = Float(rotation * .pi / 180)
+        let rotatedX = relX * cos(globalRotRad) - relZ * sin(globalRotRad)
+        let rotatedZ = relX * sin(globalRotRad) + relZ * cos(globalRotRad)
+        
+        // Converti in coordinate schermo
+        let x = CGFloat(rotatedX / maxDimension + 0.5) * size.width
+        let z = CGFloat(rotatedZ / maxDimension + 0.5) * size.height
         
         let width = CGFloat(wall.dimensions.x / maxDimension) * size.width
         let thickness = CGFloat(0.3 / maxDimension) * size.width
         
+        // Rotazione locale del muro + rotazione globale
         let wallRotation = atan2(wall.transform.columns.0.z, wall.transform.columns.0.x)
+        let totalRotation = wallRotation + globalRotRad
         
         context.saveGState()
         context.translateBy(x: x, y: z)
-        context.rotate(by: CGFloat(wallRotation + Float(rotation * .pi / 180)))
+        context.rotate(by: CGFloat(totalRotation))
         
         if (color == [255,255,255]){
             context.setStrokeColor(UIColor.black.cgColor)
@@ -440,22 +452,32 @@ class RoomPlanToCamIOConverter {
         }
         context.restoreGState()
     }
-    
+
     private func drawWindow(_ window: CapturedRoom.Surface, color: [Int], context: CGContext,
                             sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
         let position = simd_float3(window.transform.columns.3.x, window.transform.columns.3.y, window.transform.columns.3.z)
         
-        let x = CGFloat((position.x - sceneCenter.x) / maxDimension + 0.5) * size.width
-        let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
+        // Calcola posizione relativa al centro della scena
+        let relX = position.x - sceneCenter.x
+        let relZ = position.z - sceneCenter.z
+        
+        // Applica rotazione globale
+        let globalRotRad = Float(rotation * .pi / 180)
+        let rotatedX = relX * cos(globalRotRad) - relZ * sin(globalRotRad)
+        let rotatedZ = relX * sin(globalRotRad) + relZ * cos(globalRotRad)
+        
+        let x = CGFloat(rotatedX / maxDimension + 0.5) * size.width
+        let z = CGFloat(rotatedZ / maxDimension + 0.5) * size.height
         
         let width = CGFloat(window.dimensions.x / maxDimension) * size.width
         let thickness = CGFloat(0.3 / maxDimension) * size.width
         
         let windowRotation = atan2(window.transform.columns.0.z, window.transform.columns.0.x)
+        let totalRotation = windowRotation + globalRotRad
         
         context.saveGState()
         context.translateBy(x: x, y: z)
-        context.rotate(by: CGFloat(windowRotation + Float(rotation * .pi / 180)))
+        context.rotate(by: CGFloat(totalRotation))
         
         let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
 
@@ -478,22 +500,32 @@ class RoomPlanToCamIOConverter {
         
         context.restoreGState()
     }
-    
+
     private func drawDoor(_ door: CapturedRoom.Surface, color: [Int], context: CGContext,
                           sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
         let position = simd_float3(door.transform.columns.3.x, door.transform.columns.3.y, door.transform.columns.3.z)
         
-        let x = CGFloat((position.x - sceneCenter.x) / maxDimension + 0.5) * size.width
-        let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
+        // Calcola posizione relativa al centro della scena
+        let relX = position.x - sceneCenter.x
+        let relZ = position.z - sceneCenter.z
+        
+        // Applica rotazione globale
+        let globalRotRad = Float(rotation * .pi / 180)
+        let rotatedX = relX * cos(globalRotRad) - relZ * sin(globalRotRad)
+        let rotatedZ = relX * sin(globalRotRad) + relZ * cos(globalRotRad)
+        
+        let x = CGFloat(rotatedX / maxDimension + 0.5) * size.width
+        let z = CGFloat(rotatedZ / maxDimension + 0.5) * size.height
         
         let width = CGFloat(door.dimensions.x / maxDimension) * size.width
         let thickness = CGFloat(0.4 / maxDimension) * size.width
         
         let doorRotation = atan2(door.transform.columns.0.z, door.transform.columns.0.x)
+        let totalRotation = doorRotation + globalRotRad
         
         context.saveGState()
         context.translateBy(x: x, y: z)
-        context.rotate(by: CGFloat(doorRotation + Float(rotation * .pi / 180)))
+        context.rotate(by: CGFloat(totalRotation))
         
         let rect = CGRect(x: -width/2, y: -thickness/2, width: width, height: thickness)
         context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,
@@ -504,22 +536,32 @@ class RoomPlanToCamIOConverter {
         
         context.restoreGState()
     }
-    
+
     private func drawObject(_ object: CapturedRoom.Object, color: [Int], context: CGContext,
                            sceneCenter: simd_float3, maxDimension: Float, size: CGSize) {
         let position = simd_float3(object.transform.columns.3.x, object.transform.columns.3.y, object.transform.columns.3.z)
         
-        let x = CGFloat((position.x - sceneCenter.x) / maxDimension + 0.5) * size.width
-        let z = CGFloat((position.z - sceneCenter.z) / maxDimension + 0.5) * size.height
+        // Calcola posizione relativa al centro della scena
+        let relX = position.x - sceneCenter.x
+        let relZ = position.z - sceneCenter.z
+        
+        // Applica rotazione globale
+        let globalRotRad = Float(rotation * .pi / 180)
+        let rotatedX = relX * cos(globalRotRad) - relZ * sin(globalRotRad)
+        let rotatedZ = relX * sin(globalRotRad) + relZ * cos(globalRotRad)
+        
+        let x = CGFloat(rotatedX / maxDimension + 0.5) * size.width
+        let z = CGFloat(rotatedZ / maxDimension + 0.5) * size.height
         
         let width = CGFloat(object.dimensions.x / maxDimension) * size.width
         let depth = CGFloat(object.dimensions.z / maxDimension) * size.height
         
         let objectRotation = atan2(object.transform.columns.0.z, object.transform.columns.0.x)
+        let totalRotation = objectRotation + globalRotRad
         
         context.saveGState()
         context.translateBy(x: x, y: z)
-        context.rotate(by: CGFloat(objectRotation + Float(rotation * .pi / 180)))
+        context.rotate(by: CGFloat(totalRotation))
         
         let rect = CGRect(x: -width/2, y: -depth/2, width: width, height: depth)
         context.setFillColor(UIColor(red: CGFloat(color[0])/255.0,

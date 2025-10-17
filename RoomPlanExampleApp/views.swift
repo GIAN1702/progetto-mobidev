@@ -335,6 +335,7 @@ struct RotationSelectionView: View {
                                 .rotationEffect(.degrees(rotationAngle))
                         }
                         
+
                         VStack(spacing: 30) {
                             VStack(spacing: 10) {
                                 Text("Rotation: \(Int(rotationAngle))°")
@@ -344,30 +345,10 @@ struct RotationSelectionView: View {
                                     .accentColor(.blue)
                                     .padding(.horizontal, 40)
                                 
-                                HStack(spacing: 20) {
-                                    Button(action: { rotationAngle = 0 }) {
-                                        Text("Reset")
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
-                                    }
-                                    
-                                    Button(action: { rotationAngle = 90 }) {
-                                        Text("90°")
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
-                                    }
-                                    
-                                    Button(action: { rotationAngle = -90 }) {
-                                        Text("-90°")
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
-                                    }
-                                    
-                                    Button(action: { rotationAngle = 180 }) {
-                                        Text("180°")
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
-                                    }
+                                Button(action: { rotationAngle = 0 }) {
+                                    Text("Reset")
+                                        .font(.caption)
+                                        .foregroundColor(.blue)
                                 }
                             }
                             
